@@ -64,6 +64,7 @@ class TestTransformationPipeline(unittest.TestCase):
 
             with open(cp_rules_path, "w", encoding="utf-8") as f:
                 f.write("28001;Madrid\n")
+                f.write("29001;Andalucia\n")
                 f.write("41001;Andalucia\n")
 
             gen_age = Generalization(
