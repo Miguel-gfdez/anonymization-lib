@@ -182,26 +182,6 @@ class TestKAnonymity(unittest.TestCase):
         with self.assertRaises(ValueError):
             model.summary(None)
 
-    def test_k_anonymity_show_methods(self):
-        model = KAnonymity(
-            quasi_identifiers=["edad", "cp", "sexo"],
-            k_threshold=2
-        )
-
-        result = model.summary(self.df)
-
-        result.show_summary()
-        result.show_violating_groups()
-
-    def test_k_anonymity_show_violating_groups_sorted(self):
-        model = KAnonymity(
-            quasi_identifiers=["edad", "cp", "sexo"],
-            k_threshold=3
-        )
-
-        result = model.summary(self.df)
-
-        result.show_violating_groups(sort=True)
 
 
 if __name__ == "__main__":

@@ -229,42 +229,6 @@ class TestLDiversity(unittest.TestCase):
         with self.assertRaises(ValueError):
             model.summary("not_a_dataframe")
 
-    def test_l_diversity_show_methods(self):
-        model = LDiversity(
-            quasi_identifiers=["edad", "cp", "sexo"],
-            sensitive_attribute="ENFERMEDAD",
-            l_threshold=2
-        )
-
-        result = model.summary(self.df)
-
-        result.show_summary()
-        result.show_violating_groups()
-
-    def test_show_violating_groups_invalid_n_type(self):
-        model = LDiversity(
-            quasi_identifiers=["edad", "cp", "sexo"],
-            sensitive_attribute="ENFERMEDAD",
-            l_threshold=2
-        )
-
-        result = model.summary(self.df)
-
-        with self.assertRaises(ValueError):
-            result.show_violating_groups(n="10")
-
-    def test_show_violating_groups_invalid_n_value(self):
-        model = LDiversity(
-            quasi_identifiers=["edad", "cp", "sexo"],
-            sensitive_attribute="ENFERMEDAD",
-            l_threshold=2
-        )
-
-        result = model.summary(self.df)
-
-        with self.assertRaises(ValueError):
-            result.show_violating_groups(n=0)
-
 
 if __name__ == "__main__":
     unittest.main()

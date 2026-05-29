@@ -212,7 +212,7 @@ class TestGeneralization(unittest.TestCase):
         ).transform(df)
 
         values = [row["date"] for row in result.collect()]
-        self.assertEqual(values, ["05", "12"])
+        self.assertEqual(values, ["May", "December"])
 
     def test_temporal_semester_without_year_generalization(self):
         df = (

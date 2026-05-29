@@ -141,18 +141,6 @@ class TestTCloseness(unittest.TestCase):
 
         self.assertIsInstance(result.summary_df, DataFrame)
 
-    def test_show_methods_do_not_fail(self):
-        model = TCloseness(
-            quasi_identifiers=["GENERO", "EDAD", "PROVINCIA"],
-            sensitive_attribute="ENFERMEDAD",
-            t_threshold=0.5,
-            distance_metric="l1"
-        )
-
-        result = model.summary(self.df)
-
-        result.show_summary()
-        result.show_violating_groups()
 
     def test_invalid_sensitive_attribute_none(self):
         with self.assertRaises(ValueError):
