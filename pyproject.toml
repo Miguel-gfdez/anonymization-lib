@@ -13,6 +13,7 @@ license = "MIT"
 
 dependencies = [
     "numpy==2.0.2",
+    "pandas==2.2.2",
     "plotly==5.24.1",
     "pyspark==4.0.2",
     "nbformat==5.10.4",
