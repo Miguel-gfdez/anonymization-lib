@@ -436,7 +436,7 @@ class ParameterSuggestionResult:
 
             elif self.suggestion_type == "categorical":
 
-                detail_rows = self.detail_df.collect()
+                detail_rows = self.preserved_categories_df.collect()
 
                 for row in detail_rows:
 
