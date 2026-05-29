@@ -450,6 +450,39 @@ class TestParameterSuggestion(unittest.TestCase):
 
             self.assertIn(";", content)
             self.assertGreater(len(content.strip()), 0)
+    
+    def test_save_categorical_creates_txt_file(self):
+        df = self.spark.createDataFrame(
+            [
+                ("A",),
+                ("A",),
+                ("A",),
+                ("B",),
+                ("C",),
+            ],
+            ["category"]
+        )
+
+        result = ParameterSuggestion(
+            column="category",
+            rare_threshold=0.30
+        ).suggest(df)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "categorical_rules")
+
+            result.save(path)
+
+            expected_path = path + ".txt"
+
+            self.assertTrue(os.path.exists(expected_path))
+
+            with open(expected_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            self.assertIn("A;A", content)
+            self.assertNotIn("B;B", content)
+            self.assertNotIn("C;C", content)
 
 
 if __name__ == "__main__":
