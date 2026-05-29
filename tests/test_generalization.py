@@ -33,41 +33,52 @@ class TestGeneralization(unittest.TestCase):
         tmp.close()
         return tmp.name
 
+
     def test_categorical_generalization(self):
-        data = [
-            ("28001",),
-            ("04070",),
-            ("43781",),
-            ("00005",)
-        ]
+        df = self.spark.createDataFrame(
+            [("33001",), ("28001",), ("99999",)],
+            ["CP"]
+        )
 
-        df = self.spark.createDataFrame(data, ["CP"])
+        with tempfile.TemporaryDirectory() as tmpdir:
+            rules_path = os.path.join(tmpdir, "cp_region.txt")
 
-        rules_path = "data/cp_region.txt"
+            with open(rules_path, "w", encoding="utf-8") as f:
+                f.write("33001;Asturias\n")
+                f.write("28001;Madrid\n")
 
-        result = (Generalization(column="CP",rules_path=rules_path,default_value="Other").transform(df))
+            result = Generalization(
+                column="CP",
+                rules_path=rules_path,
+                default_value="Other"
+            ).transform(df)
 
-        values = [row["CP"] for row in result.collect()]
+            values = [row["CP"] for row in result.collect()]
 
-        self.assertEqual(values,["Madrid", "Andalucia", "Cataluna", "Other"])
+        self.assertEqual(values, ["Asturias", "Madrid", "Other"])
 
     def test_numeric_generalization(self):
-        data = [
-            (18,),
-            (35,),
-            (89,),
-            (1200,)
-        ]
+        df = self.spark.createDataFrame(
+            [(20,), (35,), (80,)],
+            ["age"]
+        )
 
-        df = self.spark.createDataFrame(data, ["age"])
+        with tempfile.TemporaryDirectory() as tmpdir:
+            rules_path = os.path.join(tmpdir, "age_rules.txt")
 
-        rules_path = "data/Generalizacion_numerica_edades.txt"
+            with open(rules_path, "w", encoding="utf-8") as f:
+                f.write("0;30;young\n")
+                f.write("31;60;adult\n")
 
-        result = (Generalization(column="age",rules_path=rules_path,default_value="unknown").transform(df))
+            result = Generalization(
+                column="age",
+                rules_path=rules_path,
+                default_value="unknown"
+            ).transform(df)
 
-        values = [row["age"] for row in result.collect()]
+            values = [row["age"] for row in result.collect()]
 
-        self.assertEqual(values,["18-25", "26-35", "+80", "unknown"])
+        self.assertEqual(values, ["young", "adult", "unknown"])
 
     def test_temporal_year_generalization(self):
         data = [
@@ -138,15 +149,28 @@ class TestGeneralization(unittest.TestCase):
 
         df = self.spark.createDataFrame(data, ["age"])
 
-        rules_path = "data/Generalizacion_numerica_edades.txt"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            rules_path = os.path.join(tmpdir, "age_rules.txt")
 
-        result = (Generalization(column="age",rules_path=rules_path,output_column="age_group").transform(df))
+            with open(rules_path, "w", encoding="utf-8") as f:
+                f.write("0;18;-18\n")
+                f.write("19;35;19-35\n")
+                f.write("36;50;36-50\n")
 
-        self.assertIn("age_group", result.columns)
-        self.assertNotIn("age", result.columns)
+            result = (
+                Generalization(
+                    column="age",
+                    rules_path=rules_path,
+                    output_column="age_group"
+                ).transform(df)
+            )
 
-        values = [row["age_group"] for row in result.collect()]
-        self.assertEqual(values, ["-18", "36-50"])
+            self.assertIn("age_group", result.columns)
+            self.assertNotIn("age", result.columns)
+
+            values = [row["age_group"] for row in result.collect()]
+
+            self.assertEqual(values, ["-18", "36-50"])
 
     def test_invalid_column_raises_error(self):
         df = self.spark.createDataFrame([(1,)], ["age"])
