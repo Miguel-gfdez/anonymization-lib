@@ -3,11 +3,13 @@ requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "anonymization_lib"
+name = "anonymization-lib"
 version = "1.0.0"
-description = "Library for anonymization with Spark"
-authors = [{name="Miguel"}]
+description = "Library for data anonymization with Spark"
+authors = [{ name = "Miguel" }]
 requires-python = ">=3.10"
+readme = "README.md"
+license = "MIT"
 
 dependencies = [
     "numpy==2.0.2",
