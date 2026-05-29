@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "anonymization_lib"
+version = "1.0.0"
+description = "Library for anonymization with Spark"
+authors = [{name="Miguel"}]
+requires-python = ">=3.10"
+
+dependencies = [
+    "numpy==2.0.2",
+    "plotly==5.24.1",
+    "pyspark==4.0.2",
+    "nbformat==5.10.4",
+    "pyarrow==18.1.0"
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
