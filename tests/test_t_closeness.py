@@ -265,6 +265,24 @@ class TestTCloseness(unittest.TestCase):
         with self.assertRaises(ValueError):
             model.summary(self.df)
 
+    def test_t_closeness_result_getters(self):
+        summary_df = self.spark.createDataFrame(
+            [(0.2, 0.35, 10)],
+            ["t_threshold", "max_t", "total_records"]
+        )
+
+        violating_groups = self.spark.createDataFrame(
+            [("A", 0.31), ("B", 0.42)],
+            ["group", "t_closeness"]
+        )
+
+        result = TClosenessResult(summary_df, violating_groups)
+
+        self.assertEqual(result.get_summary_df().collect(), summary_df.collect())
+        self.assertEqual(
+            result.get_violating_groups().collect(),
+            violating_groups.collect()
+        )
 
 if __name__ == "__main__":
     unittest.main()

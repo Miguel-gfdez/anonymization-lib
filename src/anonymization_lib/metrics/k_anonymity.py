@@ -127,3 +127,23 @@ class KAnonymityResult:
             df = df.orderBy(F.col("group_size").asc())
 
         df.show(n, truncate=False)
+    
+    def get_summary_df(self):
+        """
+        Returns summary statistics of k-anonymity.
+
+        Returns
+        -------
+        pyspark.sql.DataFrame
+        """
+        return self.summary_df
+
+    def get_violating_groups(self):
+        """
+        Returns equivalence groups that do not satisfy k-anonymity.
+
+        Returns
+        -------
+        pyspark.sql.DataFrame
+        """
+        return self.violating_groups
