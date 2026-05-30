@@ -28,10 +28,12 @@ class ParameterSuggestion:
         if not isinstance(column, str) or not column.strip():
             raise ValueError("'column' must be a non-empty string.")
 
-        if not isinstance(rare_threshold, float):
-            raise ValueError("'rare_threshold' must be a float.")
+        if not isinstance(rare_threshold, (int, float)):
+            raise ValueError("'rare_threshold' must be numeric.")
 
-        if not 0 < rare_threshold < 1:
+        rare_threshold = float(rare_threshold)
+
+        if rare_threshold <= 0.0 or rare_threshold >= 1.0:
             raise ValueError("'rare_threshold' must be between 0 and 1.")
 
         if not isinstance(max_categories, int) or max_categories <= 1:
@@ -116,12 +118,14 @@ class ParameterSuggestion:
 
         summary_df = (
             stats_df
-            .withColumn("column", F.lit(self.column))
-            .withColumn("inferred_type", F.lit("numeric"))
-            .withColumn("spark_type", F.lit(spark_type))
-            .withColumn("total_records", F.lit(total_records))
-            .withColumn("suggested_technique", F.lit("generalization"))
-            .withColumn("binning_strategy", F.lit("equal_frequency"))
+            .withColumns({
+                "column": F.lit(self.column),
+                "inferred_type": F.lit("numeric"),
+                "spark_type": F.lit(spark_type),
+                "total_records": F.lit(total_records),
+                "suggested_technique": F.lit("generalization"),
+                "binning_strategy": F.lit("equal_frequency")
+            })
             .select(
                 "column",
                 "inferred_type",
