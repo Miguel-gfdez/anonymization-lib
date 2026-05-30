@@ -1,4 +1,5 @@
 import os
+import json
 import unittest
 import tempfile
 from pyspark.sql import SparkSession
@@ -21,18 +22,17 @@ class TestGeneralization(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.spark.stop()
-    
-    def _create_temp_rules_file(self, content: str):
+
+    def _create_temp_rules_file(self, content: dict):
         tmp = tempfile.NamedTemporaryFile(
             mode="w",
             delete=False,
-            suffix=".txt",
+            suffix=".json",
             encoding="utf-8"
         )
-        tmp.write(content)
+        json.dump(content, tmp)
         tmp.close()
         return tmp.name
-
 
     def test_categorical_generalization(self):
         df = self.spark.createDataFrame(
@@ -40,22 +40,25 @@ class TestGeneralization(unittest.TestCase):
             ["CP"]
         )
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            rules_path = os.path.join(tmpdir, "cp_region.txt")
+        rules_path = self._create_temp_rules_file({
+            "column": "CP",
+            "type": "categorical",
+            "rules": [
+                {"from": "33001", "to": "Asturias"},
+                {"from": "28001", "to": "Madrid"}
+            ]
+        })
 
-            with open(rules_path, "w", encoding="utf-8") as f:
-                f.write("33001;Asturias\n")
-                f.write("28001;Madrid\n")
+        result = Generalization(
+            column="CP",
+            rules_path=rules_path,
+            default_value="Other"
+        ).transform(df)
 
-            result = Generalization(
-                column="CP",
-                rules_path=rules_path,
-                default_value="Other"
-            ).transform(df)
-
-            values = [row["CP"] for row in result.collect()]
-
+        values = [row["CP"] for row in result.collect()]
         self.assertEqual(values, ["Asturias", "Madrid", "Other"])
+
+        os.remove(rules_path)
 
     def test_numeric_generalization(self):
         df = self.spark.createDataFrame(
@@ -63,124 +66,141 @@ class TestGeneralization(unittest.TestCase):
             ["age"]
         )
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            rules_path = os.path.join(tmpdir, "age_rules.txt")
+        rules_path = self._create_temp_rules_file({
+            "column": "age",
+            "type": "numeric",
+            "rules": [
+                {"min": 0, "max": 30, "value": "young"},
+                {"min": 31, "max": 60, "value": "adult"}
+            ]
+        })
 
-            with open(rules_path, "w", encoding="utf-8") as f:
-                f.write("0;30;young\n")
-                f.write("31;60;adult\n")
+        result = Generalization(
+            column="age",
+            rules_path=rules_path,
+            default_value="unknown"
+        ).transform(df)
 
-            result = Generalization(
-                column="age",
-                rules_path=rules_path,
-                default_value="unknown"
-            ).transform(df)
-
-            values = [row["age"] for row in result.collect()]
-
+        values = [row["age"] for row in result.collect()]
         self.assertEqual(values, ["young", "adult", "unknown"])
 
+        os.remove(rules_path)
+
     def test_temporal_year_generalization(self):
-        data = [
-            ("1998-05-10",),
-            ("2000-12-01",)
-        ]
+        df = (
+            self.spark.createDataFrame(
+                [("1998-05-10",), ("2000-12-01",)],
+                ["birth_date"]
+            )
+            .withColumn("birth_date", F.to_date("birth_date"))
+        )
 
-        df = (self.spark.createDataFrame(data, ["birth_date"]).withColumn("birth_date", F.to_date("birth_date")))
-
-        result = (Generalization(column="birth_date",mode="year").transform(df))
+        result = Generalization(
+            column="birth_date",
+            mode="year"
+        ).transform(df)
 
         values = [row["birth_date"] for row in result.collect()]
-
         self.assertEqual(values, ["1998", "2000"])
 
     def test_temporal_month_with_year_generalization(self):
-        data = [
-            ("1998-05-10",),
-            ("2000-12-01",)
-        ]
-
-        df = (self.spark.createDataFrame(data, ["date"]).withColumn("date", F.to_date("date")))
-
-        result = (Generalization(column="date",mode="month",include_year=True).transform(df))
-
-        values = [row["date"] for row in result.collect()]
-
-        self.assertEqual(values, ["1998-05", "2000-12"])
-
-    def test_temporal_quarter_without_year_generalization(self):
-        data = [
-            ("2020-01-10",),
-            ("2020-05-10",),
-            ("2020-09-10",),
-            ("2020-12-10",)
-        ]
-
-        df = (self.spark.createDataFrame(data, ["date"]).withColumn("date", F.to_date("date")))
-
-        result = (Generalization(column="date",mode="quarter",include_year=False).transform(df))
-
-        values = [row["date"] for row in result.collect()]
-
-        self.assertEqual(values, ["Q1", "Q2", "Q3", "Q4"])
-
-    def test_temporal_semester_with_year_generalization(self):
-        data = [
-            ("2024-03-10",),
-            ("2024-10-10",)
-        ]
-
         df = (
-            self.spark.createDataFrame(data, ["date"])
+            self.spark.createDataFrame(
+                [("1998-05-10",), ("2000-12-01",)],
+                ["date"]
+            )
             .withColumn("date", F.to_date("date"))
         )
 
-        result = (Generalization(column="date",mode="semester",include_year=True).transform(df))
+        result = Generalization(
+            column="date",
+            mode="month",
+            include_year=True
+        ).transform(df)
 
         values = [row["date"] for row in result.collect()]
+        self.assertEqual(values, ["1998-05", "2000-12"])
 
+    def test_temporal_quarter_without_year_generalization(self):
+        df = (
+            self.spark.createDataFrame(
+                [
+                    ("2020-01-10",),
+                    ("2020-05-10",),
+                    ("2020-09-10",),
+                    ("2020-12-10",)
+                ],
+                ["date"]
+            )
+            .withColumn("date", F.to_date("date"))
+        )
+
+        result = Generalization(
+            column="date",
+            mode="quarter",
+            include_year=False
+        ).transform(df)
+
+        values = [row["date"] for row in result.collect()]
+        self.assertEqual(values, ["Q1", "Q2", "Q3", "Q4"])
+
+    def test_temporal_semester_with_year_generalization(self):
+        df = (
+            self.spark.createDataFrame(
+                [("2024-03-10",), ("2024-10-10",)],
+                ["date"]
+            )
+            .withColumn("date", F.to_date("date"))
+        )
+
+        result = Generalization(
+            column="date",
+            mode="semester",
+            include_year=True
+        ).transform(df)
+
+        values = [row["date"] for row in result.collect()]
         self.assertEqual(values, ["2024-S1", "2024-S2"])
 
     def test_output_column(self):
-        data = [
-            (17,),
-            (40,)
-        ]
+        df = self.spark.createDataFrame(
+            [(17,), (40,)],
+            ["age"]
+        )
 
-        df = self.spark.createDataFrame(data, ["age"])
+        rules_path = self._create_temp_rules_file({
+            "column": "age",
+            "type": "numeric",
+            "rules": [
+                {"min": 0, "max": 18, "value": "-18"},
+                {"min": 19, "max": 35, "value": "19-35"},
+                {"min": 36, "max": 50, "value": "36-50"}
+            ]
+        })
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            rules_path = os.path.join(tmpdir, "age_rules.txt")
+        result = Generalization(
+            column="age",
+            rules_path=rules_path,
+            output_column="age_group"
+        ).transform(df)
 
-            with open(rules_path, "w", encoding="utf-8") as f:
-                f.write("0;18;-18\n")
-                f.write("19;35;19-35\n")
-                f.write("36;50;36-50\n")
+        self.assertIn("age_group", result.columns)
+        self.assertNotIn("age", result.columns)
 
-            result = (
-                Generalization(
-                    column="age",
-                    rules_path=rules_path,
-                    output_column="age_group"
-                ).transform(df)
-            )
+        values = [row["age_group"] for row in result.collect()]
+        self.assertEqual(values, ["-18", "36-50"])
 
-            self.assertIn("age_group", result.columns)
-            self.assertNotIn("age", result.columns)
-
-            values = [row["age_group"] for row in result.collect()]
-
-            self.assertEqual(values, ["-18", "36-50"])
+        os.remove(rules_path)
 
     def test_invalid_column_raises_error(self):
         df = self.spark.createDataFrame([(1,)], ["age"])
 
         with self.assertRaises(ValueError):
-            Generalization(column="missing", rules_path="data/Generalizacion_numerica_edades.txt").transform(df)
+            Generalization(column="missing").transform(df)
 
     def test_none_dataframe_raises_error(self):
         with self.assertRaises(ValueError):
-            Generalization(column="age", rules_path="data/Generalizacion_numerica_edades.txt").transform(None)
+            Generalization(column="age").transform(None)
 
     def test_invalid_column_name_raises_error(self):
         with self.assertRaises(ValueError):
@@ -193,9 +213,13 @@ class TestGeneralization(unittest.TestCase):
             Generalization(column="age").transform(df)
 
     def test_temporal_without_mode_raises_error(self):
-        data = [("2024-01-01",)]
-
-        df = (self.spark.createDataFrame(data, ["date"]).withColumn("date", F.to_date("date")))
+        df = (
+            self.spark.createDataFrame(
+                [("2024-01-01",)],
+                ["date"]
+            )
+            .withColumn("date", F.to_date("date"))
+        )
 
         with self.assertRaises(ValueError):
             Generalization(column="date").transform(df)
@@ -206,14 +230,14 @@ class TestGeneralization(unittest.TestCase):
 
     def test_invalid_dataframe_type_raises_error(self):
         with self.assertRaises(ValueError):
-            Generalization(
-                column="age",
-                rules_path="data/Generalizacion_numerica_edades.txt"
-            ).transform("not_a_dataframe")
+            Generalization(column="age").transform("not_a_dataframe")
 
     def test_unsupported_temporal_mode_raises_error(self):
         df = (
-            self.spark.createDataFrame([("2024-01-01",)], ["date"])
+            self.spark.createDataFrame(
+                [("2024-01-01",)],
+                ["date"]
+            )
             .withColumn("date", F.to_date("date"))
         )
 
@@ -256,17 +280,21 @@ class TestGeneralization(unittest.TestCase):
         values = [row["date"] for row in result.collect()]
         self.assertEqual(values, ["S1", "S2"])
 
-    def test_categorical_invalid_rule_line_is_ignored(self):
+    def test_categorical_invalid_rule_is_ignored(self):
         df = self.spark.createDataFrame(
             [("A",), ("B",)],
             ["category"]
         )
 
-        rules_path = self._create_temp_rules_file(
-            "A;Group A\n"
-            "invalid_line_without_separator\n"
-            "B;Group B\n"
-        )
+        rules_path = self._create_temp_rules_file({
+            "column": "category",
+            "type": "categorical",
+            "rules": [
+                {"from": "A", "to": "Group A"},
+                {"from": "B"},
+                {"from": "B", "to": "Group B"}
+            ]
+        })
 
         result = Generalization(
             column="category",
@@ -278,17 +306,21 @@ class TestGeneralization(unittest.TestCase):
 
         os.remove(rules_path)
 
-    def test_numeric_invalid_rule_line_is_ignored(self):
+    def test_numeric_invalid_rule_is_ignored(self):
         df = self.spark.createDataFrame(
             [(10,), (30,)],
             ["age"]
         )
 
-        rules_path = self._create_temp_rules_file(
-            "0;20;young\n"
-            "invalid_line\n"
-            "21;40;adult\n"
-        )
+        rules_path = self._create_temp_rules_file({
+            "column": "age",
+            "type": "numeric",
+            "rules": [
+                {"min": 0, "max": 20, "value": "young"},
+                {"invalid": "rule"},
+                {"min": 21, "max": 40, "value": "adult"}
+            ]
+        })
 
         result = Generalization(
             column="age",
@@ -306,11 +338,15 @@ class TestGeneralization(unittest.TestCase):
             ["age"]
         )
 
-        rules_path = self._create_temp_rules_file(
-            "a;b;invalid\n"
-            "0;20;young\n"
-            "21;40;adult\n"
-        )
+        rules_path = self._create_temp_rules_file({
+            "column": "age",
+            "type": "numeric",
+            "rules": [
+                {"min": "a", "max": "b", "value": "invalid"},
+                {"min": 0, "max": 20, "value": "young"},
+                {"min": 21, "max": 40, "value": "adult"}
+            ]
+        })
 
         result = Generalization(
             column="age",
@@ -328,11 +364,15 @@ class TestGeneralization(unittest.TestCase):
             ["age"]
         )
 
-        rules_path = self._create_temp_rules_file(
-            "50;20;invalid\n"
-            "0;20;young\n"
-            "21;40;adult\n"
-        )
+        rules_path = self._create_temp_rules_file({
+            "column": "age",
+            "type": "numeric",
+            "rules": [
+                {"min": 50, "max": 20, "value": "invalid"},
+                {"min": 0, "max": 20, "value": "young"},
+                {"min": 21, "max": 40, "value": "adult"}
+            ]
+        })
 
         result = Generalization(
             column="age",
@@ -350,11 +390,15 @@ class TestGeneralization(unittest.TestCase):
             ["age"]
         )
 
-        rules_path = self._create_temp_rules_file(
-            "invalid_line\n"
-            "a;b;invalid\n"
-            "50;20;invalid\n"
-        )
+        rules_path = self._create_temp_rules_file({
+            "column": "age",
+            "type": "numeric",
+            "rules": [
+                {"invalid": "rule"},
+                {"min": "a", "max": "b", "value": "invalid"},
+                {"min": 50, "max": 20, "value": "invalid"}
+            ]
+        })
 
         with self.assertRaises(ValueError):
             Generalization(
@@ -386,6 +430,146 @@ class TestGeneralization(unittest.TestCase):
 
         values = [row["date"] for row in result.collect()]
         self.assertEqual(values, ["2020-Q1", "2020-Q2", "2020-Q3", "2020-Q4"])
+
+    def test_json_date_type_uses_temporal_generalization(self):
+        df = (
+            self.spark.createDataFrame(
+                [("2024-01-01",)],
+                ["date"]
+            )
+            .withColumn("date", F.to_date("date"))
+        )
+
+        rules_path = self._create_temp_rules_file({
+            "column": "date",
+            "type": "date",
+            "rules": []
+        })
+
+        result = Generalization(
+            column="date",
+            rules_path=rules_path,
+            mode="year"
+        ).transform(df)
+
+        values = [row["date"] for row in result.collect()]
+        self.assertEqual(values, ["2024"])
+
+        os.remove(rules_path)
+    
+    def test_unsupported_json_type_raises_error(self):
+        df = self.spark.createDataFrame(
+            [(10,)],
+            ["age"]
+        )
+
+        rules_path = self._create_temp_rules_file({
+            "column": "age",
+            "type": "unsupported",
+            "rules": []
+        })
+
+        with self.assertRaises(ValueError):
+            Generalization(
+                column="age",
+                rules_path=rules_path
+            ).transform(df)
+
+        os.remove(rules_path)
+    
+    def test_categorical_empty_rules_raises_error(self):
+        df = self.spark.createDataFrame(
+            [("A",)],
+            ["category"]
+        )
+
+        rules_path = self._create_temp_rules_file({
+            "column": "category",
+            "type": "categorical",
+            "rules": []
+        })
+
+        with self.assertRaises(ValueError):
+            Generalization(
+                column="category",
+                rules_path=rules_path
+            ).transform(df)
+
+        os.remove(rules_path)
+    
+    def test_categorical_no_valid_rules_raises_error(self):
+        df = self.spark.createDataFrame(
+            [("A",)],
+            ["category"]
+        )
+
+        rules_path = self._create_temp_rules_file({
+            "column": "category",
+            "type": "categorical",
+            "rules": [
+                {"from": "A"},
+                {"to": "Group A"}
+            ]
+        })
+
+        with self.assertRaises(ValueError):
+            Generalization(
+                column="category",
+                rules_path=rules_path
+            ).transform(df)
+
+        os.remove(rules_path)
+
+    def test_categorical_invalid_rule_type_is_ignored(self):
+        df = self.spark.createDataFrame(
+            [("A",), ("B",)],
+            ["category"]
+        )
+
+        rules_path = self._create_temp_rules_file({
+            "column": "category",
+            "type": "categorical",
+            "rules": [
+                {"from": ["A"], "to": "Invalid"},
+                {"from": "A", "to": "Group A"},
+                {"from": "B", "to": "Group B"}
+            ]
+        })
+
+        result = Generalization(
+            column="category",
+            rules_path=rules_path
+        ).transform(df)
+
+        values = [row["category"] for row in result.collect()]
+        self.assertEqual(values, ["Group A", "Group B"])
+
+        os.remove(rules_path)
+
+    def test_numeric_empty_rules_raises_error(self):
+        df = self.spark.createDataFrame(
+            [(10,)],
+            ["age"]
+        )
+
+        rules_path = self._create_temp_rules_file({
+            "column": "age",
+            "type": "numeric",
+            "rules": []
+        })
+
+        with self.assertRaises(ValueError):
+            Generalization(
+                column="age",
+                rules_path=rules_path
+            ).transform(df)
+
+        os.remove(rules_path)
+
+
+
+
+
 
 
 if __name__ == "__main__":
