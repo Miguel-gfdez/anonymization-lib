@@ -17,7 +17,7 @@ dependencies = [
     "plotly==5.24.1",
     "pyspark==4.1.2",
     "nbformat==5.10.4",
-    "pyarrow==18.1.0"
+    "pyarrow==24.0.0"
 ]
 
 [tool.setuptools]
