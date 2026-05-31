@@ -1,6 +1,7 @@
 import unittest
 import os
 import tempfile
+import json
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql import functions as F
 
@@ -26,7 +27,7 @@ class TestTransformationPipeline(unittest.TestCase):
 
         cls.data = [
             ("11111111A", "Ana", "García López", "600111222", "Madrid", "1998-03-15", 28, "28001"),
-            ("22222222B", "Julia", "Pérez Díaz", "600333444", "Oviedo", "1988-07-22", 35, "04070"),
+            ("22222222B", "Julia", "Pérez Díaz", "600333444", "Almería", "1988-07-22", 35, "04070"),
         ]
 
         cls.df = cls.spark.createDataFrame(cls.data, cls.columns)
@@ -53,18 +54,30 @@ class TestTransformationPipeline(unittest.TestCase):
         )
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            age_rules_path = os.path.join(tmpdir, "age_rules.txt")
-            cp_rules_path = os.path.join(tmpdir, "cp_rules.txt")
+            age_rules_path = os.path.join(tmpdir, "age_rules.json")
+            cp_rules_path = os.path.join(tmpdir, "cp_rules.json")
 
             with open(age_rules_path, "w", encoding="utf-8") as f:
-                f.write("0;18;-18\n")
-                f.write("19;25;19-25\n")
-                f.write("26;35;26-35\n")
-                f.write("36;50;36-50\n")
+                json.dump({
+                    "column": "EDAD",
+                    "type": "numeric",
+                    "rules": [
+                        {"min": 0, "max": 18, "value": "-18"},
+                        {"min": 19, "max": 25, "value": "19-25"},
+                        {"min": 26, "max": 35, "value": "26-35"},
+                        {"min": 36, "max": 50, "value": "36-50"}
+                    ]
+                }, f)
 
             with open(cp_rules_path, "w", encoding="utf-8") as f:
-                f.write("28001;Madrid\n")
-                f.write("04070;Andalucia\n")
+                json.dump({
+                    "column": "CP",
+                    "type": "categorical",
+                    "rules": [
+                        {"from": "28001", "to": "Madrid"},
+                        {"from": "04070", "to": "Andalucia"}
+                    ]
+                }, f)
 
             gen_age = Generalization(
                 column="EDAD",
@@ -105,7 +118,6 @@ class TestTransformationPipeline(unittest.TestCase):
             self.assertIsNone(rows[1]["NOMBRE"])
             self.assertEqual(rows[1]["EDAD"], "26-35")
             self.assertEqual(rows[1]["PROVINCIA"], "Andalucia")
-
 
     def test_pipeline_with_substitution_only(self):
         sub = Substitution(

@@ -1,6 +1,8 @@
 # python -m unittest tests.test_k_anonymity
 
 # coverage run --source=anonymization_lib -m unittest discover -s tests -p "test_*.py" -t .
+# coverage run --source=anonymization_lib -m unittest tests.test_generalization
+
 
 # coverage report -m
 # coverage html

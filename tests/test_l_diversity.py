@@ -229,6 +229,24 @@ class TestLDiversity(unittest.TestCase):
         with self.assertRaises(ValueError):
             model.summary("not_a_dataframe")
 
+    def test_l_diversity_result_getters(self):
+        summary_df = self.spark.createDataFrame(
+            [(2, 1, 10)],
+            ["target_l", "current_l", "total_records"]
+        )
+
+        violating_groups = self.spark.createDataFrame(
+            [("A", 1), ("B", 1)],
+            ["group", "l_diversity"]
+        )
+
+        result = LDiversityResult(summary_df, violating_groups)
+
+        self.assertEqual(result.get_summary_df().collect(), summary_df.collect())
+        self.assertEqual(
+            result.get_violating_groups().collect(),
+            violating_groups.collect()
+        )
 
 if __name__ == "__main__":
     unittest.main()
