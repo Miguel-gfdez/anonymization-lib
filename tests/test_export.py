@@ -6,7 +6,6 @@ from pyspark.sql import SparkSession
 from anonymization_lib import DataExporter
 
 
-
 class TestDataExporter(unittest.TestCase):
 
     @classmethod
@@ -25,7 +24,8 @@ class TestDataExporter(unittest.TestCase):
             ("*********", 35, "28---", "F", "covid"),
             ("*********", 35, "28---", "F", "covid"),
             ("*********", 35, "28---", "F", "anemia"),
-            ("*********", 35, "28---", "F", "migraña")]
+            ("*********", 35, "28---", "F", "migraña")
+        ]
 
         cls.df = cls.spark.createDataFrame(cls.data, cls.columns)
         cls.base_output_dir = "data/export"
@@ -49,9 +49,13 @@ class TestDataExporter(unittest.TestCase):
 
     def test_export_parquet(self):
         path = os.path.join(self.base_output_dir, "parquet_data")
-        exporter = DataExporter(file_format="parquet", mode="overwrite")
 
-        message = exporter.export(self.df, path)
+        message = DataExporter.export(
+            self.df,
+            path,
+            file_format="parquet",
+            mode="overwrite"
+        )
 
         self.assertTrue(os.path.exists(path))
         self.assertIn("Dataset successfully exported", message)
@@ -59,40 +63,83 @@ class TestDataExporter(unittest.TestCase):
 
     def test_export_csv(self):
         path = os.path.join(self.base_output_dir, "csv_data")
-        exporter = DataExporter(file_format="csv", mode="overwrite", header=True)
 
-        message = exporter.export(self.df, path)
+        message = DataExporter.export(
+            self.df,
+            path,
+            file_format="csv",
+            mode="overwrite",
+            header=True
+        )
 
         self.assertTrue(os.path.exists(path))
         self.assertIn("Dataset successfully exported", message)
         self.assertIn("csv", message)
 
+    def test_export_orc(self):
+        path = os.path.join(self.base_output_dir, "orc_data")
+
+        message = DataExporter.export(
+            self.df,
+            path,
+            file_format="orc",
+            mode="overwrite"
+        )
+
+        self.assertTrue(os.path.exists(path))
+        self.assertIn("Dataset successfully exported", message)
+        self.assertIn("orc", message)
+
     def test_invalid_format(self):
+        path = os.path.join(self.base_output_dir, "invalid_format")
+
         with self.assertRaises(ValueError):
-            DataExporter(file_format="json")
+            DataExporter.export(
+                self.df,
+                path,
+                file_format="json"
+            )
 
     def test_invalid_mode(self):
+        path = os.path.join(self.base_output_dir, "invalid_mode")
+
         with self.assertRaises(ValueError):
-            DataExporter(file_format="csv", mode="invalid_mode")
+            DataExporter.export(
+                self.df,
+                path,
+                file_format="csv",
+                mode="invalid_mode"
+            )
 
     def test_invalid_path(self):
-        exporter = DataExporter(file_format="parquet", mode="overwrite")
-
         with self.assertRaises(ValueError):
-            exporter.export(self.df, "")
+            DataExporter.export(
+                self.df,
+                "",
+                file_format="parquet",
+                mode="overwrite"
+            )
 
     def test_invalid_dataframe(self):
-        exporter = DataExporter(file_format="parquet", mode="overwrite")
         path = os.path.join(self.base_output_dir, "invalid_df")
 
         with self.assertRaises(TypeError):
-            exporter.export("not_a_dataframe", path)
+            DataExporter.export(
+                "not_a_dataframe",
+                path,
+                file_format="parquet",
+                mode="overwrite"
+            )
 
     def test_export_message(self):
         path = os.path.join(self.base_output_dir, "message_test")
-        exporter = DataExporter(file_format="parquet", mode="overwrite")
 
-        message = exporter.export(self.df, path)
+        message = DataExporter.export(
+            self.df,
+            path,
+            file_format="parquet",
+            mode="overwrite"
+        )
 
         expected_message = (
             f"Dataset successfully exported in 'parquet' format "
@@ -100,6 +147,14 @@ class TestDataExporter(unittest.TestCase):
         )
 
         self.assertEqual(message, expected_message)
+
+    def test_default_export_is_parquet_overwrite(self):
+        path = os.path.join(self.base_output_dir, "default_parquet")
+
+        message = DataExporter.export(self.df, path)
+
+        self.assertTrue(os.path.exists(path))
+        self.assertIn("parquet", message)
 
 
 if __name__ == "__main__":
