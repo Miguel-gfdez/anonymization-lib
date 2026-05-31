@@ -1,10 +1,10 @@
-from pyspark.sql import DataFrame, SparkSession
 import os
+from pyspark.sql import DataFrame, SparkSession
 
 
 class DataImporter:
     """
-    Imports datasets into Spark DataFrames from different storage formats.
+    Utility class for importing datasets into Spark DataFrames.
 
     Supported formats:
     - csv
@@ -13,69 +13,16 @@ class DataImporter:
     - s3
     """
 
-    def __init__(self,file_format: str = "parquet",header: bool = True,infer_schema: bool = True):
-        """
-        Parameters
-        ----------
-        file_format : str, default="parquet"
-            Input format.
+    VALID_FORMATS = {"csv", "parquet", "orc", "s3"}
 
-            Supported values:
-            - 'csv'
-            - 'parquet'
-            - 'orc'
-            - 's3'
-
-        header : bool, default=True
-            Whether the CSV file contains a header row.
-            Ignored for non-CSV formats.
-
-        infer_schema : bool, default=True
-            Whether Spark should infer the schema automatically for CSV files.
-            Ignored for non-CSV formats.
-        """
-
-        valid_formats = {"csv","parquet","orc","s3"}
-
-        if file_format not in valid_formats:
-            raise ValueError(f"Unsupported format. Use one of: {valid_formats}")
-
-        self.file_format = file_format
-        self.header = header
-        self.infer_schema = infer_schema
-
-    def _validate_path(self, path: str):
-        """
-        Validates that the source path exists and is valid.
-
-        Parameters
-        ----------
-        path : str
-            Source path.
-
-        Raises
-        ------
-        ValueError
-            If path is empty or not a string.
-
-        FileNotFoundError
-            If the local path does not exist.
-            S3 paths are excluded from local validation.
-        """
-
-        if not isinstance(path, str) or not path.strip():
-            raise ValueError("The source path must be a non-empty string.")
-
-        # Skip local validation for S3
-        if path.startswith("s3a://"):
-            return
-
-        normalized_path = os.path.abspath(path)
-
-        if not os.path.exists(normalized_path):
-            raise FileNotFoundError(f"The source path does not exist: {normalized_path}")
-
-    def import_data(self,spark: SparkSession,path: str) -> DataFrame:
+    @staticmethod
+    def import_data(
+        spark: SparkSession,
+        path: str,
+        file_format: str = "parquet",
+        header: bool = True,
+        infer_schema: bool = True
+    ) -> DataFrame:
         """
         Imports a dataset into a Spark DataFrame.
 
@@ -83,9 +30,20 @@ class DataImporter:
         ----------
         spark : pyspark.sql.SparkSession
             Active Spark session.
-
         path : str
             Source dataset path.
+        file_format : str, default="parquet"
+            Input format. Supported values are:
+            - 'csv'
+            - 'parquet'
+            - 'orc'
+            - 's3'
+        header : bool, default=True
+            Whether the CSV file contains a header row.
+            Ignored for non-CSV formats.
+        infer_schema : bool, default=True
+            Whether Spark should infer the schema automatically for CSV files.
+            Ignored for non-CSV formats.
 
         Returns
         -------
@@ -96,26 +54,45 @@ class DataImporter:
         ------
         TypeError
             If spark is not a SparkSession.
+        ValueError
+            If path or file_format are invalid.
+        FileNotFoundError
+            If the local source path does not exist.
         """
-
         if not isinstance(spark, SparkSession):
             raise TypeError("spark must be a pyspark.sql.SparkSession.")
 
-        self._validate_path(path)
+        if file_format not in DataImporter.VALID_FORMATS:
+            raise ValueError(
+                f"Unsupported format. Use one of: {DataImporter.VALID_FORMATS}"
+            )
 
-        if self.file_format == "csv":
-            df = (spark.read.option("header", self.header).option("inferSchema", self.infer_schema).csv(path))
+        if not isinstance(path, str) or not path.strip():
+            raise ValueError("The source path must be a non-empty string.")
 
-        elif self.file_format == "parquet":
-            df = spark.read.parquet(path)
-
-        elif self.file_format == "orc":
-            df = spark.read.orc(path)
-
-        elif self.file_format == "s3":
+        if file_format == "s3":
             if not path.startswith("s3a://"):
                 raise ValueError("S3 paths must start with 's3a://'")
+        else:
+            normalized_path = os.path.abspath(path)
+            if not os.path.exists(normalized_path):
+                raise FileNotFoundError(
+                    f"The source path does not exist: {normalized_path}"
+                )
 
-            df = spark.read.parquet(path)
+        if file_format == "csv":
+            return (
+                spark.read
+                .option("header", header)
+                .option("inferSchema", infer_schema)
+                .csv(path)
+            )
 
-        return df
+        if file_format == "parquet":
+            return spark.read.parquet(path)
+
+        if file_format == "orc":
+            return spark.read.orc(path)
+
+        if file_format == "s3":
+            return spark.read.parquet(path)
