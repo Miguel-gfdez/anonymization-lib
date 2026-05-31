@@ -1,5 +1,7 @@
 import unittest
-
+import os
+import tempfile
+import json
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql import functions as F
 
@@ -25,7 +27,7 @@ class TestTransformationPipeline(unittest.TestCase):
 
         cls.data = [
             ("11111111A", "Ana", "García López", "600111222", "Madrid", "1998-03-15", 28, "28001"),
-            ("22222222B", "Julia", "Pérez Díaz", "600333444", "Oviedo", "1988-07-22", 35, "04070"),
+            ("22222222B", "Julia", "Pérez Díaz", "600333444", "Almería", "1988-07-22", 35, "04070"),
         ]
 
         cls.df = cls.spark.createDataFrame(cls.data, cls.columns)
@@ -51,45 +53,71 @@ class TestTransformationPipeline(unittest.TestCase):
             mode="full"
         )
 
-        gen_age = Generalization(
-            column="EDAD",
-            rules_path="data/Generalizacion_numerica_edades.txt"
-        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            age_rules_path = os.path.join(tmpdir, "age_rules.json")
+            cp_rules_path = os.path.join(tmpdir, "cp_rules.json")
 
-        gen_cp = Generalization(
-            column="CP",
-            rules_path="data/cp_region.txt",
-            output_column="PROVINCIA"
-        )
+            with open(age_rules_path, "w", encoding="utf-8") as f:
+                json.dump({
+                    "column": "EDAD",
+                    "type": "numeric",
+                    "rules": [
+                        {"min": 0, "max": 18, "value": "-18"},
+                        {"min": 19, "max": 25, "value": "19-25"},
+                        {"min": 26, "max": 35, "value": "26-35"},
+                        {"min": 36, "max": 50, "value": "36-50"}
+                    ]
+                }, f)
 
-        pipeline = [supp, sub, gen_age, gen_cp]
+            with open(cp_rules_path, "w", encoding="utf-8") as f:
+                json.dump({
+                    "column": "CP",
+                    "type": "categorical",
+                    "rules": [
+                        {"from": "28001", "to": "Madrid"},
+                        {"from": "04070", "to": "Andalucia"}
+                    ]
+                }, f)
 
-        result = TransformationPipeline(self.df, pipeline)
+            gen_age = Generalization(
+                column="EDAD",
+                rules_path=age_rules_path
+            )
 
-        self.assertIsInstance(result, DataFrame)
+            gen_cp = Generalization(
+                column="CP",
+                rules_path=cp_rules_path,
+                output_column="PROVINCIA"
+            )
 
-        self.assertIn("DNI", result.columns)
-        self.assertIn("NOMBRE", result.columns)
-        self.assertIn("EDAD", result.columns)
-        self.assertIn("PROVINCIA", result.columns)
+            pipeline = [supp, sub, gen_age, gen_cp]
 
-        self.assertNotIn("APELLIDOS", result.columns)
-        self.assertNotIn("TELEFONO", result.columns)
-        self.assertNotIn("CIUDAD", result.columns)
-        self.assertNotIn("FECHA_NACIMIENTO", result.columns)
-        self.assertNotIn("CP", result.columns)
+            result = TransformationPipeline(self.df, pipeline)
 
-        rows = result.collect()
+            self.assertIsInstance(result, DataFrame)
 
-        self.assertEqual(rows[0]["DNI"], "*********")
-        self.assertIsNone(rows[0]["NOMBRE"])
-        self.assertEqual(rows[0]["EDAD"], "26-35")
-        self.assertEqual(rows[0]["PROVINCIA"], "Madrid")
+            self.assertIn("DNI", result.columns)
+            self.assertIn("NOMBRE", result.columns)
+            self.assertIn("EDAD", result.columns)
+            self.assertIn("PROVINCIA", result.columns)
 
-        self.assertEqual(rows[1]["DNI"], "*********")
-        self.assertIsNone(rows[1]["NOMBRE"])
-        self.assertEqual(rows[1]["EDAD"], "26-35")
-        self.assertEqual(rows[1]["PROVINCIA"], "Andalucia")
+            self.assertNotIn("APELLIDOS", result.columns)
+            self.assertNotIn("TELEFONO", result.columns)
+            self.assertNotIn("CIUDAD", result.columns)
+            self.assertNotIn("FECHA_NACIMIENTO", result.columns)
+            self.assertNotIn("CP", result.columns)
+
+            rows = result.collect()
+
+            self.assertEqual(rows[0]["DNI"], "*********")
+            self.assertIsNone(rows[0]["NOMBRE"])
+            self.assertEqual(rows[0]["EDAD"], "26-35")
+            self.assertEqual(rows[0]["PROVINCIA"], "Madrid")
+
+            self.assertEqual(rows[1]["DNI"], "*********")
+            self.assertIsNone(rows[1]["NOMBRE"])
+            self.assertEqual(rows[1]["EDAD"], "26-35")
+            self.assertEqual(rows[1]["PROVINCIA"], "Andalucia")
 
     def test_pipeline_with_substitution_only(self):
         sub = Substitution(

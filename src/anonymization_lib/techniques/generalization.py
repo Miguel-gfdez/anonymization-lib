@@ -2,6 +2,8 @@ from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 from ..utils import infer_semantic_type
 import warnings
+import json
+
 
 
 class Generalization:
@@ -9,8 +11,8 @@ class Generalization:
     Applies generalization to a column in a Spark DataFrame.
 
     The transformation supports:
-    - Categorical mapping using external rules (value -> generalized value)
-    - Numerical generalization using interval rules (start;end -> generalized value)
+    - Categorical mapping using external rules
+    - Numerical generalization using interval rules
     - Temporal aggregation (year, month, quarter, semester), optionally preserving the year
 
     """
@@ -76,9 +78,21 @@ class Generalization:
             return df.withColumnRenamed(self.column, self.output_column)
         return df
 
+    def _get_rules_type(self) -> str:
+        with open(self.rules_path, "r", encoding="utf-8") as f:
+            config = json.load(f)
+
+        return config.get("type")
+    
+    def _apply_temporal_with_mode(self, df: DataFrame) -> DataFrame:
+        if self.mode is None:
+            raise ValueError("'mode' must be provided for temporal generalization.")
+
+        return self._apply_temporal_generalization(df)
+
     def _apply_categorical(self, df: DataFrame) -> DataFrame:
         """
-        Applies categorical generalization using mapping rules.
+        Applies categorical generalization using mapping rules from a JSON file.
 
         Returns
         -------
@@ -87,29 +101,46 @@ class Generalization:
 
         mapping = {}
 
-        with open(self.rules_path, "r") as f:
-            for line in f:
-                parts = line.strip().split(";")
+        with open(self.rules_path, "r", encoding="utf-8") as f:
+            config = json.load(f)
 
-                if len(parts) != 2:
-                    warnings.warn(f"Invalid line ignored: {line}")
-                    continue
+        rules = config.get("rules", [])
 
-                original, general = parts
-                mapping[original] = general
+        if not rules:
+            raise ValueError("No rules found in JSON file.")
 
-        mapping_expr = F.create_map([F.lit(x) for pair in mapping.items() for x in pair])
+        for rule in rules:
+            try:
+                original = str(rule["from"])
+                general = str(rule["to"])
+            except KeyError as e:
+                warnings.warn(f"Invalid rule ignored. Missing key {e}: {rule}")
+                continue
+            except (TypeError, ValueError):
+                warnings.warn(f"Invalid categorical rule ignored: {rule}")
+                continue
 
-        new_col = mapping_expr[F.col(self.column)]
+            mapping[original] = general
+
+        if not mapping:
+            raise ValueError("No valid rules found.")
+
+        mapping_expr = F.create_map(
+            [F.lit(x) for pair in mapping.items() for x in pair]
+        )
+
+        new_col = mapping_expr[F.col(self.column).cast("string")]
 
         if self.default_value is not None:
-            new_col = F.coalesce(new_col, F.lit(self.default_value))
+            new_col = F.coalesce(new_col, F.lit(str(self.default_value)))
+        else:
+            new_col = F.coalesce(new_col, F.col(self.column).cast("string"))
 
-        return self._rename_output_column(df.withColumn(self.column, new_col))
+        return self._rename_output_column(df.withColumn(self.column, new_col.cast("string")))
 
     def _apply_numeric(self, df: DataFrame) -> DataFrame:
         """
-        Applies numeric generalization using interval rules.
+        Applies numeric generalization using interval rules from a JSON file.
 
         Returns
         -------
@@ -118,33 +149,39 @@ class Generalization:
 
         expr = None
 
-        with open(self.rules_path, "r") as f:
-            for line in f:
-                parts = line.strip().split(";")
+        with open(self.rules_path, "r", encoding="utf-8") as f:
+            config = json.load(f)
 
-                if len(parts) != 3:
-                    warnings.warn(f"Invalid line ignored: {line}")
-                    continue
+        rules = config.get("rules", [])
 
-                start, end, label = parts
+        if not rules:
+            raise ValueError("No rules found in JSON file.")
 
-                try:
-                    start = float(start)
-                    end = float(end)
-                except:
-                    warnings.warn(f"Invalid numeric values: {line}")
-                    continue
+        for rule in rules:
+            try:
+                start = float(rule["min"])
+                end = float(rule["max"])
+                label = str(rule["value"])
+            except KeyError as e:
+                warnings.warn(f"Invalid rule ignored. Missing key {e}: {rule}")
+                continue
+            except (TypeError, ValueError):
+                warnings.warn(f"Invalid numeric values in rule: {rule}")
+                continue
 
-                if start > end:
-                    warnings.warn(f"Invalid interval: {line}")
-                    continue
+            if start > end:
+                warnings.warn(f"Invalid interval ignored: {rule}")
+                continue
 
-                condition = (F.col(self.column) >= start) & (F.col(self.column) <= end)
+            condition = (
+                (F.col(self.column).cast("double") >= start) &
+                (F.col(self.column).cast("double") <= end)
+            )
 
-                if expr is None:
-                    expr = F.when(condition, F.lit(label))
-                else:
-                    expr = expr.when(condition, F.lit(label))
+            if expr is None:
+                expr = F.when(condition, F.lit(label))
+            else:
+                expr = expr.when(condition, F.lit(label))
 
         if expr is None:
             raise ValueError("No valid rules found.")
@@ -156,7 +193,6 @@ class Generalization:
 
         return self._rename_output_column(df.withColumn(self.column, expr.cast("string")))
     
-
     def _apply_temporal_generalization(self, df: DataFrame) -> DataFrame:
         """
         Applies temporal generalization based on the selected aggregation level.
@@ -199,7 +235,6 @@ class Generalization:
 
         return self._rename_output_column(df.withColumn(self.column, new_col.cast("string")))
     
-    
     def transform(self, df: DataFrame) -> DataFrame:
         """
         Applies generalization to the specified column.
@@ -229,21 +264,27 @@ class Generalization:
         if self.column not in df.columns:
             raise ValueError(f"Column '{self.column}' does not exist in the DataFrame.")
 
+        if self.rules_path is not None:
+            json_type = self._get_rules_type()
+
+            if json_type == "numeric":
+                return self._apply_numeric(df)
+
+            if json_type == "categorical":
+                return self._apply_categorical(df)
+
+            if json_type == "date":
+                return self._apply_temporal_with_mode(df)
+
+            raise ValueError(f"Unsupported generalization type in JSON: {json_type}")
+
         semantic_type = infer_semantic_type(df, self.column)
 
         if semantic_type == "date":
-            if self.mode is None:
-                raise ValueError("'mode' must be provided for temporal generalization.")
-            return self._apply_temporal_generalization(df)
+            return self._apply_temporal_with_mode(df)
 
-        if semantic_type == "numeric":
-            if self.rules_path is None:
-                raise ValueError("'rules_path' must be provided for numeric generalization.")
-            return self._apply_numeric(df)
-
-        if semantic_type == "categorical":
-            if self.rules_path is None:
-                raise ValueError("'rules_path' must be provided for categorical generalization.")
-            return self._apply_categorical(df)
+        raise ValueError(
+            "For numeric or categorical generalization, 'rules_path' must be provided."
+        )
 
 

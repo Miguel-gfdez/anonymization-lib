@@ -181,6 +181,25 @@ class TestKAnonymity(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             model.summary(None)
+    
+    def test_k_anonymity_result_getters(self):
+        summary_df = self.spark.createDataFrame(
+            [(2, 1, 10)],
+            ["target_k", "current_k", "total_records"]
+        )
+
+        violating_groups = self.spark.createDataFrame(
+            [("A", 1), ("B", 1)],
+            ["group", "group_size"]
+        )
+
+        result = KAnonymityResult(summary_df, violating_groups)
+
+        self.assertEqual(result.get_summary_df().collect(), summary_df.collect())
+        self.assertEqual(
+            result.get_violating_groups().collect(),
+            violating_groups.collect()
+        )
 
 
 
