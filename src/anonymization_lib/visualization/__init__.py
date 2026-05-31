@@ -1,4 +1,4 @@
 from .visualization import Visualization
-from .Suggestion import ParameterSuggestion, AnonymizationAdvisor
+from .Suggestion import AnonymizationAdvisor
 
-__all__ = ["Visualization", "ParameterSuggestion", "AnonymizationAdvisor"]
+__all__ = ["Visualization", "AnonymizationAdvisor"]
