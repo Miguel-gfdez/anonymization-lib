@@ -32,13 +32,21 @@ jobs:
           coverage run --source=src/anonymization_lib \
             -m unittest discover -s tests -p "test_*.py"
 
+          coverage report
           coverage xml
+          coverage html
 
-      - name: Upload coverage report
+      - name: Upload coverage XML report
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-report
+          name: coverage-xml-report
           path: coverage.xml
+
+      - name: Upload HTML coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html-report
+          path: htmlcov/
 
   static-analysis:
     runs-on: ubuntu-latest
@@ -51,10 +59,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Download coverage report
+      - name: Download coverage XML report
         uses: actions/download-artifact@v4
         with:
-          name: coverage-report
+          name: coverage-xml-report
 
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v6
