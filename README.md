@@ -1,6 +1,8 @@
 # Data Anonymization Library for Big Data
 
-[![CI](https://github.com/Miguel-gfdez/anonymization-lib/actions/workflows/test.yml/badge.svg)](https://github.com/Miguel-gfdez/anonymization-lib/actions) [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=Miguel-gfdez_anonymization-lib&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=Miguel-gfdez_anonymization-lib)
+[![CI](https://github.com/Miguel-gfdez/anonymization-lib/actions/workflows/test.yml/badge.svg)](https://github.com/Miguel-gfdez/anonymization-lib/actions) 
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=Miguel-gfdez_anonymization-lib&metric=alert_status)](https://sonarcloud.io/project/overview?id=Miguel-gfdez_anonymization-lib)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=Miguel-gfdez_anonymization-lib&metric=coverage)](https://sonarcloud.io/project/overview?id=Miguel-gfdez_anonymization-lib)
 
 Data anonymization library developed with Python and Apache Spark for processing large volumes of sensitive information in a scalable, efficient and modular way.
 
