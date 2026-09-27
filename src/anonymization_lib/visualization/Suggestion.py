@@ -173,19 +173,9 @@ class AnonymizationAdvisor:
                 group_reduction_frequency
             ))
 
-        return (
-            df.sparkSession.createDataFrame(
-                rows,
-                [
-                    "column",
-                    "cardinality",
-                    "current_equivalence_groups",
-                    "groups_without_column",
-                    "group_reduction",
-                    "group_reduction_frequency"
-                ]
-            )
-            .withColumn(
+        def _add_suggested_action(df: DataFrame) -> DataFrame:
+            """Add the suggested action based on group reduction frequency."""
+            return df.withColumn(
                 "suggested_action",
                 F.when(
                     F.col("group_reduction_frequency") >= 0.50,
@@ -197,11 +187,30 @@ class AnonymizationAdvisor:
                     F.lit("Low impact on equivalence groups")
                 )
             )
-            .orderBy(
+
+
+        def _create_suggestion_dataframe(df: DataFrame, rows: list) -> DataFrame:
+            """Create and format the parameter suggestion DataFrame."""
+            result = df.sparkSession.createDataFrame(
+                rows,
+                [
+                    "column",
+                    "cardinality",
+                    "current_equivalence_groups",
+                    "groups_without_column",
+                    "group_reduction",
+                    "group_reduction_frequency",
+                ]
+            )
+
+            result = _add_suggested_action(result)
+
+            return result.orderBy(
                 F.desc("group_reduction_frequency"),
                 F.desc("cardinality")
             )
-        )
+
+        return _create_suggestion_dataframe(df, rows)
 
 
 class AnonymizationAdvisorResult:
