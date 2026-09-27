@@ -111,7 +111,7 @@ class Generalization:
 
         for rule in rules:
             try:
-                original = str(rule["from"])
+                original = rule["from"]
                 general = str(rule["to"])
             except KeyError as e:
                 warnings.warn(f"Invalid rule ignored. Missing key {e}: {rule}")
@@ -120,7 +120,11 @@ class Generalization:
                 warnings.warn(f"Invalid categorical rule ignored: {rule}")
                 continue
 
-            mapping[original] = general
+            # Allow a single value or a list of values in "from"
+            originals = original if isinstance(original, list) else [original]
+
+            for value in originals:
+                mapping[str(value)] = general
 
         if not mapping:
             raise ValueError("No valid rules found.")
