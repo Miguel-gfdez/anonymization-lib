@@ -60,10 +60,7 @@ class Suppression:
                 result_df = result_df.drop(column)
 
             elif mode == "null":
-                # result_df = result_df.withColumn(column, F.lit(None))
-
                 original_type = result_df.schema[column].dataType
-                # print(original_type)
                 result_df = result_df.withColumn(column,F.lit(None).cast(original_type))
                 
 
