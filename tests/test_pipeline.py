@@ -6,7 +6,7 @@ from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql import functions as F
 
 from anonymization_lib import Suppression, Substitution, Generalization
-from anonymization_lib.techniques import TransformationPipeline
+from anonymization_lib.techniques import transformation_pipeline
 
 
 class TestTransformationPipeline(unittest.TestCase):
@@ -92,7 +92,7 @@ class TestTransformationPipeline(unittest.TestCase):
 
             pipeline = [supp, sub, gen_age, gen_cp]
 
-            result = TransformationPipeline(self.df, pipeline)
+            result = transformation_pipeline(self.df, pipeline)
 
             self.assertIsInstance(result, DataFrame)
 
@@ -126,37 +126,37 @@ class TestTransformationPipeline(unittest.TestCase):
             mode="full"
         )
 
-        result = TransformationPipeline(self.df, [sub])
+        result = transformation_pipeline(self.df, [sub])
         values = [row["DNI"] for row in result.collect()]
 
         self.assertEqual(values, ["*********", "*********"])
 
     def test_pipeline_with_no_transformations_raises_error(self):
         with self.assertRaises(ValueError):
-            TransformationPipeline(self.df, None)
+            transformation_pipeline(self.df, None)
 
     def test_pipeline_with_empty_transformations_raises_error(self):
         with self.assertRaises(ValueError):
-            TransformationPipeline(self.df, [])
+            transformation_pipeline(self.df, [])
 
     def test_pipeline_with_invalid_transformations_type_raises_error(self):
         with self.assertRaises(ValueError):
-            TransformationPipeline(self.df, "not_a_list")
+            transformation_pipeline(self.df, "not_a_list")
 
     def test_pipeline_with_none_transformation_raises_error(self):
         with self.assertRaises(ValueError):
-            TransformationPipeline(self.df, [None])
+            transformation_pipeline(self.df, [None])
 
     def test_pipeline_with_object_without_transform_method_raises_error(self):
         with self.assertRaises(ValueError):
-            TransformationPipeline(self.df, [object()])
+            transformation_pipeline(self.df, [object()])
 
     def test_pipeline_returns_original_dataframe_when_identity_transformation(self):
         class IdentityTransformation:
             def transform(self, df):
                 return df
 
-        result = TransformationPipeline(self.df, [IdentityTransformation()])
+        result = transformation_pipeline(self.df, [IdentityTransformation()])
 
         self.assertIsInstance(result, DataFrame)
         self.assertEqual(result.columns, self.df.columns)

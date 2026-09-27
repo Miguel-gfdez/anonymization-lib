@@ -7,7 +7,7 @@ class Substitution:
     Applies masking to a column by replacing its values fully or partially
     with a specified character.
     """
-    def __init__(self, column: str, replacement_char: str = "*", mode: str = "full", start: int = None, length: int = None):
+    def __init__(self,column: str,replacement_char: str = "*",mode: str = "full",start: int = None,length: int = None):
         """
         Initializes the substitution transformation.
 
@@ -31,35 +31,57 @@ class Substitution:
         length : int, optional
             Number of characters to replace starting from 'start'.
             Required when mode is 'partial'.
-
         """
         if not isinstance(column, str) or not column.strip():
             raise ValueError("'column' must be a non-empty string.")
 
         if not isinstance(replacement_char, str) or len(replacement_char) != 1:
-            raise ValueError("The replacement character must be a single character.")
+            raise ValueError(
+                "The replacement character must be a single character."
+            )
 
         if mode not in ("full", "partial"):
             raise ValueError("Mode must be 'full' or 'partial'.")
 
-        if mode == "partial":
-            if start is None or length is None:
-                raise ValueError("In 'partial' mode, 'start' and 'length' must be provided.")
-            
-            if not isinstance(start, int) or not isinstance(length, int):
-                raise ValueError("'start' and 'length' must be integers.")
-
-            if start < 0 or length <= 0:
-                raise ValueError("'start' must be >= 0 and 'length' must be > 0.")
-
-        if mode == "full" and (start is not None or length is not None):
-            raise ValueError("'start' and 'length' must not be provided in 'full' mode.")
+        self._validate_mode_parameters(mode, start, length)
 
         self.column = column
         self.replacement_char = replacement_char
         self.mode = mode
         self.start = start
         self.length = length
+
+
+    @staticmethod
+    def _validate_mode_parameters(
+        mode: str,
+        start: int | None,
+        length: int | None
+    ) -> None:
+        """Validate parameters specific to the substitution mode."""
+
+        if mode == "full":
+            if start is not None or length is not None:
+                raise ValueError(
+                    "'start' and 'length' must not be provided in 'full' mode."
+                )
+            return
+
+        if start is None or length is None:
+            raise ValueError(
+                "In 'partial' mode, 'start' and 'length' must be provided."
+            )
+
+        if not isinstance(start, int) or not isinstance(length, int):
+            raise ValueError("'start' and 'length' must be integers.")
+
+        if start < 0 or length <= 0:
+            raise ValueError(
+                "'start' must be >= 0 and 'length' must be > 0."
+            )
+
+
+
 
     def transform(self, df: DataFrame) -> DataFrame:
         """

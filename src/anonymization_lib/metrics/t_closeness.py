@@ -177,7 +177,7 @@ class TCloseness(EquivalenceGroups):
         Computes distance depending on selected metric.
         """
 
-        if self.distance_metric == "l1":
+        if self.distance_metric in ("l1", "emd"):
             diff = df.withColumn(
                 "abs_diff",
                 F.abs(F.col("group_prob") - F.col("global_prob"))
@@ -194,21 +194,13 @@ class TCloseness(EquivalenceGroups):
             q = F.col("global_prob") + F.lit(epsilon)
             m = (p + q) / 2
 
-            jsd_expr = F.lit(0.5) * ((p * F.log2(p / m)) + (q * F.log2(q / m)))
+            jsd_expr = F.lit(0.5) * (
+                (p * F.log2(p / m))
+                + (q * F.log2(q / m))
+            )
 
             return df.groupBy(self.quasi_identifiers).agg(
                 F.sum(jsd_expr).alias("t_closeness")
-            )
-
-        elif self.distance_metric == "emd":
-            # simplified EMD (L1 approximation for categorical distributions)
-            diff = df.withColumn(
-                "abs_diff",
-                F.abs(F.col("group_prob") - F.col("global_prob"))
-            )
-
-            return diff.groupBy(self.quasi_identifiers).agg(
-                (F.sum("abs_diff") / 2).alias("t_closeness")
             )
 
 

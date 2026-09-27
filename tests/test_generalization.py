@@ -2,6 +2,7 @@ import os
 import json
 import unittest
 import tempfile
+
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 
@@ -194,13 +195,16 @@ class TestGeneralization(unittest.TestCase):
 
     def test_invalid_column_raises_error(self):
         df = self.spark.createDataFrame([(1,)], ["age"])
+        generalization = Generalization(column="missing")
 
         with self.assertRaises(ValueError):
-            Generalization(column="missing").transform(df)
+            generalization.transform(df)
 
     def test_none_dataframe_raises_error(self):
+        generalization = Generalization(column="age")
+
         with self.assertRaises(ValueError):
-            Generalization(column="age").transform(None)
+            generalization.transform(None)
 
     def test_invalid_column_name_raises_error(self):
         with self.assertRaises(ValueError):
@@ -208,9 +212,10 @@ class TestGeneralization(unittest.TestCase):
 
     def test_numeric_without_rules_path_raises_error(self):
         df = self.spark.createDataFrame([(18,), (40,)], ["age"])
+        generalization = Generalization(column="age")
 
         with self.assertRaises(ValueError):
-            Generalization(column="age").transform(df)
+            generalization.transform(df)
 
     def test_temporal_without_mode_raises_error(self):
         df = (
@@ -221,16 +226,20 @@ class TestGeneralization(unittest.TestCase):
             .withColumn("date", F.to_date("date"))
         )
 
+        generalization = Generalization(column="date")
+
         with self.assertRaises(ValueError):
-            Generalization(column="date").transform(df)
+            generalization.transform(df)
 
     def test_invalid_output_column_raises_error(self):
         with self.assertRaises(ValueError):
             Generalization(column="age", output_column="")
 
     def test_invalid_dataframe_type_raises_error(self):
+        generalization = Generalization(column="age")
+
         with self.assertRaises(ValueError):
-            Generalization(column="age").transform("not_a_dataframe")
+            generalization.transform("not_a_dataframe")
 
     def test_unsupported_temporal_mode_raises_error(self):
         df = (
@@ -241,8 +250,13 @@ class TestGeneralization(unittest.TestCase):
             .withColumn("date", F.to_date("date"))
         )
 
+        generalization = Generalization(
+            column="date",
+            mode="week"
+        )
+
         with self.assertRaises(ValueError):
-            Generalization(column="date", mode="week").transform(df)
+            generalization.transform(df)
 
     def test_temporal_month_without_year_generalization(self):
         df = (
@@ -400,11 +414,13 @@ class TestGeneralization(unittest.TestCase):
             ]
         })
 
+        generalization = Generalization(
+            column="age",
+            rules_path=rules_path
+        )
+
         with self.assertRaises(ValueError):
-            Generalization(
-                column="age",
-                rules_path=rules_path
-            ).transform(df)
+            generalization.transform(df)
 
         os.remove(rules_path)
 
@@ -429,7 +445,10 @@ class TestGeneralization(unittest.TestCase):
         ).transform(df)
 
         values = [row["date"] for row in result.collect()]
-        self.assertEqual(values, ["2020-Q1", "2020-Q2", "2020-Q3", "2020-Q4"])
+        self.assertEqual(
+            values,
+            ["2020-Q1", "2020-Q2", "2020-Q3", "2020-Q4"]
+        )
 
     def test_json_date_type_uses_temporal_generalization(self):
         df = (
@@ -456,7 +475,7 @@ class TestGeneralization(unittest.TestCase):
         self.assertEqual(values, ["2024"])
 
         os.remove(rules_path)
-    
+
     def test_unsupported_json_type_raises_error(self):
         df = self.spark.createDataFrame(
             [(10,)],
@@ -469,14 +488,16 @@ class TestGeneralization(unittest.TestCase):
             "rules": []
         })
 
+        generalization = Generalization(
+            column="age",
+            rules_path=rules_path
+        )
+
         with self.assertRaises(ValueError):
-            Generalization(
-                column="age",
-                rules_path=rules_path
-            ).transform(df)
+            generalization.transform(df)
 
         os.remove(rules_path)
-    
+
     def test_categorical_empty_rules_raises_error(self):
         df = self.spark.createDataFrame(
             [("A",)],
@@ -489,14 +510,16 @@ class TestGeneralization(unittest.TestCase):
             "rules": []
         })
 
+        generalization = Generalization(
+            column="category",
+            rules_path=rules_path
+        )
+
         with self.assertRaises(ValueError):
-            Generalization(
-                column="category",
-                rules_path=rules_path
-            ).transform(df)
+            generalization.transform(df)
 
         os.remove(rules_path)
-    
+
     def test_categorical_no_valid_rules_raises_error(self):
         df = self.spark.createDataFrame(
             [("A",)],
@@ -512,11 +535,13 @@ class TestGeneralization(unittest.TestCase):
             ]
         })
 
+        generalization = Generalization(
+            column="category",
+            rules_path=rules_path
+        )
+
         with self.assertRaises(ValueError):
-            Generalization(
-                column="category",
-                rules_path=rules_path
-            ).transform(df)
+            generalization.transform(df)
 
         os.remove(rules_path)
 
@@ -558,18 +583,15 @@ class TestGeneralization(unittest.TestCase):
             "rules": []
         })
 
+        generalization = Generalization(
+            column="age",
+            rules_path=rules_path
+        )
+
         with self.assertRaises(ValueError):
-            Generalization(
-                column="age",
-                rules_path=rules_path
-            ).transform(df)
+            generalization.transform(df)
 
         os.remove(rules_path)
-
-
-
-
-
 
 
 if __name__ == "__main__":

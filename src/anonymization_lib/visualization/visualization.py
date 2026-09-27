@@ -49,29 +49,30 @@ class Visualization:
         for i, label in enumerate(labels):
             visible = [False] * n
             visible[i] = True
+
             buttons.append(
-                dict(
-                    label=label,
-                    method="update",
-                    args=[
+                {
+                    "label": label,
+                    "method": "update",
+                    "args": [
                         {"visible": visible},
                         {"title": fig.layout.title.text}
                     ],
-                )
+                }
             )
 
         fig.update_layout(
             updatemenus=[
-                dict(
-                    type="buttons",
-                    direction="right",
-                    buttons=buttons,
-                    x=0.5,
-                    xanchor="center",
-                    y=1.18,
-                    yanchor="top",
-                    showactive=True,
-                )
+                {
+                    "type": "buttons",
+                    "direction": "right",
+                    "buttons": buttons,
+                    "x": 0.5,
+                    "xanchor": "center",
+                    "y": 1.18,
+                    "yanchor": "top",
+                    "showactive": True,
+                }
             ]
         )
 
