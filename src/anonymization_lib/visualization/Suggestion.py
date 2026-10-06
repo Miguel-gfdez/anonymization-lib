@@ -1,34 +1,83 @@
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
-import os
 
 
 class AnonymizationAdvisor:
     """
-    Suggests anonymization improvements based on k-anonymity.
+    Suggests anonymization improvements based on k-anonymity analysis.
+
+    The advisor evaluates the current level of k-anonymity of a dataset
+    and analyzes the influence of each quasi-identifier on the formation
+    of equivalence groups.
+
+    For each quasi-identifier, the advisor estimates how the number of
+    equivalence groups would change if that attribute were removed from
+    the quasi-identifier set. This information can help identify attributes
+    with a high impact on data fragmentation and therefore potential
+    candidates for generalization, suppression, or other anonymization
+    transformations.
+
+    Parameters
+    ----------
+    quasi_identifiers : list of str
+        Columns used to form equivalence groups (quasi-identifiers).
+        These are attributes that could potentially re-identify individuals
+        when combined.
+
+    k : int
+        Target k-anonymity value. Each equivalence group should contain
+        at least ``k`` records for the dataset to satisfy the configured
+        k-anonymity requirement.
+
+        The value must be an integer greater than 1.
+
+    Notes
+    -----
+    The advisor does not modify the input dataset or automatically apply
+    anonymization techniques. It only analyzes the dataset and generates
+    recommendations that can guide subsequent anonymization decisions.
+
+    The analysis is performed using Spark DataFrame operations so that
+    large datasets can be processed in a distributed manner.
+
+    The generated suggestions are based on the reduction in the number
+    of equivalence groups produced by removing each quasi-identifier
+    individually. A larger reduction indicates that the attribute has a
+    stronger influence on the fragmentation of the dataset.
     """
 
     def __init__(self, quasi_identifiers: list, k: int):
         if not isinstance(quasi_identifiers, list) or not quasi_identifiers:
             raise ValueError("'quasi_identifiers' must be a non-empty list.")
 
-        if not all(isinstance(col, str) and col.strip() for col in quasi_identifiers):
-            raise ValueError("All quasi-identifiers must be non-empty strings.")
+        if not all(
+            isinstance(col, str) and col.strip()
+            for col in quasi_identifiers
+        ):
+            raise ValueError(
+                "All quasi-identifiers must be non-empty strings."
+            )
 
         if len(quasi_identifiers) != len(set(quasi_identifiers)):
-            raise ValueError("'quasi_identifiers' must not contain duplicates.")
+            raise ValueError(
+                "'quasi_identifiers' must not contain duplicates."
+            )
 
         if not isinstance(k, int) or k <= 1:
-            raise ValueError("'k' must be an integer greater than 1.")
+            raise ValueError(
+                "'k' must be an integer greater than 1."
+            )
 
         self.quasi_identifiers = quasi_identifiers
         self.k = k
 
-    def suggest(self, df: DataFrame) -> "AnonymizationAdvisorResult":
+    def suggest(
+        self,
+        df: DataFrame
+    ) -> "AnonymizationAdvisorResult":
         """
         Analyzes the dataset and generates recommendations to improve
-        k-anonymity by identifying quasi-identifiers that contribute the most
-        to the creation of equivalence groups.
+        k-anonymity.
 
         Parameters
         ----------
@@ -38,73 +87,100 @@ class AnonymizationAdvisor:
         Returns
         -------
         AnonymizationAdvisorResult
-            Object containing a summary of the current equivalence groups
-            and column-level anonymization suggestions.
+            Object containing the summary and column-level suggestions.
         """
         if df is None:
             raise ValueError("Input DataFrame cannot be None.")
 
-        if not isinstance(df, DataFrame):
-            raise ValueError("Input must be a pyspark.sql.DataFrame.")
+        # Compatible with standard Spark and Spark Connect.
+        if not hasattr(df, "groupBy"):
+            raise ValueError(
+                "Input must be a Spark-compatible DataFrame."
+            )
 
         missing_columns = [
-            column for column in self.quasi_identifiers
+            column
+            for column in self.quasi_identifiers
             if column not in df.columns
         ]
 
         if missing_columns:
-            raise ValueError(f"Columns not found in DataFrame: {missing_columns}")
+            raise ValueError(
+                f"Columns not found in DataFrame: {missing_columns}"
+            )
 
-        equivalence_groups = (
-            self
-            ._build_equivalence_groups(df, self.quasi_identifiers)
-            .cache()
+        equivalence_groups = self._build_equivalence_groups(
+            df,
+            self.quasi_identifiers
         )
 
-        equivalence_groups.count()
+        summary_df, current_groups = self._build_summary(
+            df,
+            equivalence_groups
+        )
 
-        risky_groups = equivalence_groups.filter(F.col("group_size") < self.k)
-
-        summary_df = self._build_summary(df, equivalence_groups, risky_groups)
-        suggestions_df = self._build_suggestions(df, equivalence_groups)
+        suggestions_df = self._build_suggestions(
+            df,
+            current_groups
+        )
 
         return AnonymizationAdvisorResult(
             summary_df=summary_df,
             suggestions_df=suggestions_df
         )
 
-    def _build_equivalence_groups(self, df: DataFrame, columns: list) -> DataFrame:
+    def _build_equivalence_groups(
+        self,
+        df: DataFrame,
+        columns: list
+    ) -> DataFrame:
+        """
+        Builds equivalence groups using the selected quasi-identifiers.
+        """
         return (
             df
             .groupBy(*columns)
             .agg(F.count("*").alias("group_size"))
         )
 
-    def _get_k_value(self, equivalence_groups: DataFrame) -> int:
-        return (
-            equivalence_groups
-            .agg(F.min("group_size").alias("k"))
-            .collect()[0]["k"]
-        )
-
-    def _get_group_count(self, equivalence_groups: DataFrame) -> int:
-        return equivalence_groups.count()
-
-    def _get_column_cardinality(self, df: DataFrame, column: str) -> int:
-        return df.select(column).distinct().count()
-
-    def _build_summary(self,df: DataFrame,equivalence_groups: DataFrame,risky_groups: DataFrame) -> DataFrame:
+    def _build_summary(
+        self,
+        df: DataFrame,
+        equivalence_groups: DataFrame
+    ):
+        """
+        Builds the global k-anonymity summary.
+        """
         total_records = df.count()
-        total_groups = equivalence_groups.count()
-        risky_groups_count = risky_groups.count()
 
-        risky_records = (
-            risky_groups
-            .agg(F.coalesce(F.sum("group_size"), F.lit(0)).alias("risky_records"))
-            .collect()[0]["risky_records"]
+        stats = (
+            equivalence_groups
+            .agg(
+                F.count("*").alias("total_groups"),
+
+                F.sum(
+                    F.when(
+                        F.col("group_size") < self.k,
+                        1
+                    ).otherwise(0)
+                ).alias("risky_groups"),
+
+                F.sum(
+                    F.when(
+                        F.col("group_size") < self.k,
+                        F.col("group_size")
+                    ).otherwise(0)
+                ).alias("risky_records"),
+
+                F.min("group_size").alias("current_k")
+            )
+            .first()
         )
 
-        current_k = self._get_k_value(equivalence_groups)
+        total_groups = stats["total_groups"]
+        risky_groups = stats["risky_groups"] or 0
+        risky_records = stats["risky_records"] or 0
+        current_k = stats["current_k"]
 
         risky_records_frequency = (
             round(risky_records / total_records, 4)
@@ -112,13 +188,13 @@ class AnonymizationAdvisor:
             else 0.0
         )
 
-        return df.sparkSession.createDataFrame(
+        summary_df = df.sparkSession.createDataFrame(
             [(
                 self.k,
                 current_k,
                 total_records,
                 total_groups,
-                risky_groups_count,
+                risky_groups,
                 risky_records,
                 risky_records_frequency
             )],
@@ -133,33 +209,66 @@ class AnonymizationAdvisor:
             ]
         )
 
-    def _build_suggestions(self,df: DataFrame,equivalence_groups: DataFrame) -> DataFrame:
-        current_groups = self._get_group_count(equivalence_groups)
+        return summary_df, total_groups
+
+    def _build_suggestions(
+        self,
+        df: DataFrame,
+        current_groups: int
+    ) -> DataFrame:
+        """
+        Builds column-level anonymization suggestions.
+        """
+        qis = self.quasi_identifiers
+
+        # Calculate all column cardinalities in a single Spark action.
+        cardinalities = (
+            df
+            .agg(*[
+                F.countDistinct(F.col(column)).alias(column)
+                for column in qis
+            ])
+            .first()
+        )
+
+        # Calculate the number of equivalence groups that would remain
+        # after removing each quasi-identifier.
+        if len(qis) == 1:
+            groups_without = {
+                qis[0]: 1
+            }
+
+        else:
+            groups_without = (
+                df
+                .agg(*[
+                    F.countDistinct(
+                        F.struct(*[
+                            F.col(c)
+                            for c in qis
+                            if c != column
+                        ])
+                    ).alias(column)
+                    for column in qis
+                ])
+                .first()
+            )
 
         rows = []
 
-        for column in self.quasi_identifiers:
-            remaining_columns = [
-                col for col in self.quasi_identifiers
-                if col != column
-            ]
+        for column in qis:
+            cardinality = cardinalities[column]
+            groups_without_column = groups_without[column]
 
-            if not remaining_columns:
-                continue
-
-            reduced_groups = (
-                equivalence_groups
-                .groupBy(*remaining_columns)
-                .agg(F.sum("group_size").alias("group_size"))
+            group_reduction = (
+                current_groups - groups_without_column
             )
 
-            groups_without_column = self._get_group_count(reduced_groups)
-            cardinality = self._get_column_cardinality(df, column)
-
-            group_reduction = current_groups - groups_without_column
-
             group_reduction_frequency = (
-                round(group_reduction / current_groups, 4)
+                round(
+                    group_reduction / current_groups,
+                    4
+                )
                 if current_groups > 0
                 else 0.0
             )
@@ -173,44 +282,45 @@ class AnonymizationAdvisor:
                 group_reduction_frequency
             ))
 
-        def _add_suggested_action(df: DataFrame) -> DataFrame:
-            """Add the suggested action based on group reduction frequency."""
-            return df.withColumn(
+        result = df.sparkSession.createDataFrame(
+            rows,
+            [
+                "column",
+                "cardinality",
+                "current_equivalence_groups",
+                "groups_without_column",
+                "group_reduction",
+                "group_reduction_frequency",
+            ]
+        )
+
+        return (
+            result
+            .withColumn(
                 "suggested_action",
                 F.when(
                     F.col("group_reduction_frequency") >= 0.50,
-                    F.lit("High impact on equivalence groups")
-                ).when(
+                    F.lit(
+                        "High impact on equivalence groups"
+                    )
+                )
+                .when(
                     F.col("group_reduction_frequency") >= 0.20,
-                    F.lit("Medium impact on equivalence groups")
-                ).otherwise(
-                    F.lit("Low impact on equivalence groups")
+                    F.lit(
+                        "Medium impact on equivalence groups"
+                    )
+                )
+                .otherwise(
+                    F.lit(
+                        "Low impact on equivalence groups"
+                    )
                 )
             )
-
-
-        def _create_suggestion_dataframe(df: DataFrame, rows: list) -> DataFrame:
-            """Create and format the parameter suggestion DataFrame."""
-            result = df.sparkSession.createDataFrame(
-                rows,
-                [
-                    "column",
-                    "cardinality",
-                    "current_equivalence_groups",
-                    "groups_without_column",
-                    "group_reduction",
-                    "group_reduction_frequency",
-                ]
-            )
-
-            result = _add_suggested_action(result)
-
-            return result.orderBy(
+            .orderBy(
                 F.desc("group_reduction_frequency"),
                 F.desc("cardinality")
             )
-
-        return _create_suggestion_dataframe(df, rows)
+        )
 
 
 class AnonymizationAdvisorResult:
@@ -226,29 +336,23 @@ class AnonymizationAdvisorResult:
         Column-level anonymization recommendations.
     """
 
-    def __init__(self, summary_df: DataFrame, suggestions_df: DataFrame):
+    def __init__(
+        self,
+        summary_df: DataFrame,
+        suggestions_df: DataFrame
+    ):
         self.summary_df = summary_df
         self.suggestions_df = suggestions_df
 
     def get_summary_df(self) -> DataFrame:
         """
         Returns the summary DataFrame.
-
-        Returns
-        -------
-        DataFrame
-            Global equivalence group statistics.
         """
         return self.summary_df
 
     def get_suggestions_df(self) -> DataFrame:
         """
         Returns the suggestions DataFrame.
-
-        Returns
-        -------
-        DataFrame
-            Column-level anonymization recommendations.
         """
         return self.suggestions_df
 
@@ -293,7 +397,6 @@ class AnonymizationAdvisorResult:
 
             risky_groups = 0
             risky_records = 0
-
         """
         self.summary_df.show(truncate=truncate)
 
@@ -343,16 +446,3 @@ class AnonymizationAdvisorResult:
         has a strong impact on re-identification risk.
         """
         self.suggestions_df.show(truncate=truncate)
-
-
-
-
-
-
-
-
-
-
-
-
-

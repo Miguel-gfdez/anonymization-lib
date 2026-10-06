@@ -53,36 +53,35 @@ class DataExporter:
         str
             Confirmation message indicating that the export was completed.
         """
-        if not isinstance(df, DataFrame):
-            raise TypeError("df must be a pyspark.sql.DataFrame.")
+        if not hasattr(df, "write"):
+            raise TypeError("df must provide a Spark-compatible write interface.")
 
         if file_format not in DataExporter.VALID_FORMATS:
-            raise ValueError("file_format must be 'csv', 'parquet' or 'orc'.")
+            raise ValueError(
+                f"Unsupported format. Use one of: {DataExporter.VALID_FORMATS}"
+            )
 
         if mode not in DataExporter.VALID_MODES:
             raise ValueError(
-                "mode must be one of: 'overwrite', 'append', 'ignore', "
-                "'error', 'errorifexists'."
+                f"Unsupported mode. Use one of: {DataExporter.VALID_MODES}"
             )
 
         if not isinstance(path, str) or not path.strip():
             raise ValueError("The destination path must be a non-empty string.")
 
-        parent_dir = os.path.dirname(os.path.abspath(path))
-        if parent_dir:
-            os.makedirs(parent_dir, exist_ok=True)
-
         writer = df.write.mode(mode)
 
         if file_format == "csv":
             writer.option("header", header).csv(path)
+
         elif file_format == "parquet":
             writer.parquet(path)
+
         elif file_format == "orc":
             writer.orc(path)
 
         return (
             f"Dataset successfully exported in '{file_format}' format to: "
-            f"{os.path.abspath(path)}"
-        )  
+            f"{path}"
+        )
 
