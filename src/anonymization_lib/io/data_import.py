@@ -59,26 +59,21 @@ class DataImporter:
         FileNotFoundError
             If the local source path does not exist.
         """
-        if not isinstance(spark, SparkSession):
-            raise TypeError("spark must be a pyspark.sql.SparkSession.")
+        if not hasattr(spark, "read"):
+            raise TypeError("spark must provide a Spark-compatible read interface.")
+
+        if not isinstance(path, str) or not path.strip():
+            raise ValueError("The source path must be a non-empty string.")
 
         if file_format not in DataImporter.VALID_FORMATS:
             raise ValueError(
                 f"Unsupported format. Use one of: {DataImporter.VALID_FORMATS}"
             )
 
-        if not isinstance(path, str) or not path.strip():
-            raise ValueError("The source path must be a non-empty string.")
-
         if file_format == "s3":
             if not path.startswith("s3a://"):
                 raise ValueError("S3 paths must start with 's3a://'")
-        else:
-            normalized_path = os.path.abspath(path)
-            if not os.path.exists(normalized_path):
-                raise FileNotFoundError(
-                    f"The source path does not exist: {normalized_path}"
-                )
+            return spark.read.parquet(path)
 
         if file_format == "csv":
             return (
@@ -93,6 +88,3 @@ class DataImporter:
 
         if file_format == "orc":
             return spark.read.orc(path)
-
-        if file_format == "s3":
-            return spark.read.parquet(path)
