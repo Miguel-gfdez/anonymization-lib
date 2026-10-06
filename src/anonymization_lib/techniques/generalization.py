@@ -511,11 +511,8 @@ class Generalization:
                 )
                 continue
 
-            originals = (
-                original
-                if isinstance(original, list)
-                else [original]
-            )
+            # Allow a single value or a list of values in "from"
+            originals = original if isinstance(original, list) else [original]
 
             for value in originals:
                 mapping[str(value)] = general
