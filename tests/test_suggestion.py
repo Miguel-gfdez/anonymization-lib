@@ -115,10 +115,12 @@ class TestAnonymizationAdvisor(unittest.TestCase):
         expected_columns = {
             "column",
             "cardinality",
+            "cardinality_frequency",
             "current_equivalence_groups",
             "groups_without_column",
             "group_reduction",
             "group_reduction_frequency",
+            "risk_level",
             "suggested_action",
         }
 
@@ -256,20 +258,24 @@ class TestAnonymizationAdvisor(unittest.TestCase):
                 (
                     "EDAD",
                     4,
+                    0.4444,
                     5,
                     3,
                     2,
                     0.4,
+                    "Medium",
                     "Consider moderate generalization",
                 )
             ],
             [
                 "column",
                 "cardinality",
+                "cardinality_frequency",
                 "current_equivalence_groups",
                 "groups_without_column",
                 "group_reduction",
                 "group_reduction_frequency",
+                "risk_level",
                 "suggested_action",
             ],
         )
