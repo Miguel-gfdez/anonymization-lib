@@ -21,7 +21,7 @@ dependencies = [
 
 [project.optional-dependencies]
 local = [
-    "pyspark==4.2.0"
+    "pyspark==4.2.1"
 ]
 
 [tool.setuptools]
