@@ -1,5 +1,5 @@
 import unittest
-
+from unittest.mock import patch
 from pyspark.sql import SparkSession
 
 from anonymization_lib import KAnonymity
@@ -300,6 +300,86 @@ class TestKAnonymity(unittest.TestCase):
             result.get_violating_groups().collect(),
             violating_groups.collect(),
         )
+
+    def test_k_anonymity_result_show_summary(self):
+        model = KAnonymity(
+            quasi_identifiers=["edad", "cp", "sexo"],
+            k_threshold=2,
+        )
+        result = model.summary(self.df)
+
+        with patch.object(result.summary_df, "show") as mock_show:
+            result.show_summary()
+
+        mock_show.assert_called_once_with(truncate=False)
+
+    def test_k_anonymity_result_show_violating_groups_default(self):
+        model = KAnonymity(
+            quasi_identifiers=["edad", "cp", "sexo"],
+            k_threshold=3,
+        )
+        result = model.summary(self.df)
+
+        with patch.object(result.violating_groups, "show") as mock_show:
+            result.show_violating_groups()
+
+        mock_show.assert_called_once_with(10, truncate=False)
+
+    def test_k_anonymity_result_show_violating_groups_custom_n(self):
+        model = KAnonymity(
+            quasi_identifiers=["edad", "cp", "sexo"],
+            k_threshold=3,
+        )
+        result = model.summary(self.df)
+
+        with patch.object(result.violating_groups, "show") as mock_show:
+            result.show_violating_groups(n=5)
+
+        mock_show.assert_called_once_with(5, truncate=False)
+
+    def test_k_anonymity_result_show_violating_groups_sorted(self):
+        model = KAnonymity(
+            quasi_identifiers=["edad", "cp", "sexo"],
+            k_threshold=3,
+        )
+        result = model.summary(self.df)
+
+        with patch.object(result.violating_groups, "orderBy") as mock_order:
+            result.show_violating_groups(n=5, sort=True)
+
+        mock_order.assert_called_once()
+        mock_order.return_value.show.assert_called_once_with(
+            5,
+            truncate=False,
+        )
+
+    def test_k_anonymity_result_show_violating_groups_invalid_n(self):
+        model = KAnonymity(
+            quasi_identifiers=["edad", "cp", "sexo"],
+            k_threshold=3,
+        )
+        result = model.summary(self.df)
+
+        invalid_values = [0, -1, 1.5, "10", True, None]
+
+        for value in invalid_values:
+            with self.subTest(n=value):
+                with self.assertRaises(ValueError):
+                    result.show_violating_groups(n=value)
+
+    def test_k_anonymity_result_show_violating_groups_invalid_sort(self):
+        model = KAnonymity(
+            quasi_identifiers=["edad", "cp", "sexo"],
+            k_threshold=3,
+        )
+        result = model.summary(self.df)
+
+        invalid_values = [1, 0, "True", None]
+
+        for value in invalid_values:
+            with self.subTest(sort=value):
+                with self.assertRaises(ValueError):
+                    result.show_violating_groups(sort=value)
 
 
 if __name__ == "__main__":

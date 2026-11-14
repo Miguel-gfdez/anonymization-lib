@@ -1,5 +1,5 @@
 import unittest
-
+from unittest.mock import patch
 from pyspark.sql import SparkSession
 
 from anonymization_lib import LDiversity
@@ -361,6 +361,48 @@ class TestLDiversity(unittest.TestCase):
             result.get_violating_groups().collect(),
             violating_groups.collect(),
         )
+
+    
+    def test_l_diversity_none_quasi_identifiers(self):
+        with self.assertRaises(ValueError):
+            LDiversity(
+                quasi_identifiers=None,
+                sensitive_attribute="ENFERMEDAD",
+                l_threshold=2,
+            )
+
+    def test_l_diversity_result_show_summary(self):
+        model = LDiversity(
+            quasi_identifiers=["edad", "cp", "sexo"],
+            sensitive_attribute="ENFERMEDAD",
+            l_threshold=2,
+        )
+        result = model.summary(self.df)
+
+        with patch.object(result.summary_df, "show") as mock_show:
+            result.show_summary()
+
+        mock_show.assert_called_once_with(truncate=False)
+
+    def test_l_diversity_result_show_violating_groups(self):
+        model = LDiversity(
+            quasi_identifiers=["edad", "cp", "sexo"],
+            sensitive_attribute="ENFERMEDAD",
+            l_threshold=4,
+        )
+        result = model.summary(self.df)
+
+        for n in [10, 5]:
+            with self.subTest(n=n):
+                with patch.object(
+                    result.violating_groups, "show"
+                ) as mock_show:
+                    result.show_violating_groups(n=n)
+
+                mock_show.assert_called_once_with(
+                    n,
+                    truncate=False,
+                )
 
 
 if __name__ == "__main__":
