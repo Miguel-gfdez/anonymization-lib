@@ -1,5 +1,5 @@
 import unittest
-
+from unittest.mock import patch
 from pyspark.sql import SparkSession
 
 from anonymization_lib.metrics.t_closeness import (
@@ -186,50 +186,6 @@ class TestTCloseness(unittest.TestCase):
                 row["t_closeness"],
                 threshold,
             )
-
-    def test_l1_metric_runs(self):
-        model = TCloseness(
-            quasi_identifiers=[
-                "GENERO",
-                "EDAD",
-                "PROVINCIA",
-            ],
-            sensitive_attribute="ENFERMEDAD",
-            t_threshold=0.5,
-            distance_metric="l1",
-        )
-
-        result = model.summary(self.df)
-
-        self.assertTrue(
-            hasattr(result.summary_df, "select")
-        )
-
-        self.assertTrue(
-            hasattr(result.violating_groups, "select")
-        )
-
-    def test_jsd_metric_runs(self):
-        model = TCloseness(
-            quasi_identifiers=[
-                "GENERO",
-                "EDAD",
-                "PROVINCIA",
-            ],
-            sensitive_attribute="ENFERMEDAD",
-            t_threshold=0.5,
-            distance_metric="jsd",
-        )
-
-        result = model.summary(self.df)
-
-        self.assertTrue(
-            hasattr(result.summary_df, "select")
-        )
-
-        self.assertTrue(
-            hasattr(result.violating_groups, "select")
-        )
 
     def test_invalid_sensitive_attribute_none(self):
         with self.assertRaises(ValueError):
@@ -491,6 +447,150 @@ class TestTCloseness(unittest.TestCase):
             result.get_violating_groups().collect(),
             violating_groups.collect(),
         )
+
+    
+    
+    def test_distance_metrics_expected_values(self):
+        # Probabilidades para un grupo de equivalencia:
+        # P = [0.75, 0.25]
+        # Q = [0.50, 0.50]
+        probability_df = self.spark.createDataFrame(
+            [
+                ("A", 0.75, 0.50),
+                ("A", 0.25, 0.50),
+            ],
+            ["GENERO", "group_prob", "global_prob"],
+        )
+
+        import math
+
+        p = [0.75, 0.25]
+        q = [0.50, 0.50]
+        m = [(a + b) / 2 for a, b in zip(p, q)]
+
+        expected_jsd = 0.5 * sum(
+            a * math.log2(a / mid)
+            for a, mid in zip(p, m)
+        ) + 0.5 * sum(
+            b * math.log2(b / mid)
+            for b, mid in zip(q, m)
+        )
+
+        for metric, expected in [
+            ("l1", 0.25),
+            ("jsd", expected_jsd),
+        ]:
+            with self.subTest(metric=metric):
+                model = TCloseness(
+                    quasi_identifiers=["GENERO"],
+                    sensitive_attribute="ENFERMEDAD",
+                    t_threshold=0.5,
+                    distance_metric=metric,
+                )
+
+                result = model._compute_distance(
+                    probability_df
+                ).first()
+
+                self.assertAlmostEqual(
+                    result["t_closeness"],
+                    expected,
+                    places=6,
+                )
+
+    def test_none_quasi_identifiers(self):
+        with self.assertRaises(ValueError):
+            TCloseness(
+                quasi_identifiers=None,
+                sensitive_attribute="ENFERMEDAD",
+                t_threshold=0.5,
+            )
+
+    def test_result_show_summary(self):
+        model = TCloseness(
+            quasi_identifiers=["GENERO", "EDAD", "PROVINCIA"],
+            sensitive_attribute="ENFERMEDAD",
+            t_threshold=0.5,
+        )
+        result = model.summary(self.df)
+
+        with patch.object(result.summary_df, "show") as mock_show:
+            result.show_summary()
+
+        mock_show.assert_called_once_with(truncate=False)
+
+    def test_result_show_violating_groups(self):
+        model = TCloseness(
+            quasi_identifiers=["GENERO", "EDAD", "PROVINCIA"],
+            sensitive_attribute="ENFERMEDAD",
+            t_threshold=0.01,
+        )
+        result = model.summary(self.df)
+
+        for n in [10, 5]:
+            with self.subTest(n=n):
+                with patch(
+                    "pyspark.sql.dataframe.DataFrame.show",
+                    autospec=True,
+                ) as mock_show:
+                    result.show_violating_groups(n=n)
+
+                mock_show.assert_called_once()
+                self.assertEqual(mock_show.call_args.args[1], n)
+                self.assertFalse(
+                    mock_show.call_args.kwargs["truncate"]
+                )
+
+    def test_result_show_violating_groups_sorted_and_rounded(self):
+        model = TCloseness(
+            quasi_identifiers=["GENERO", "EDAD", "PROVINCIA"],
+            sensitive_attribute="ENFERMEDAD",
+            t_threshold=0.01,
+        )
+        result = model.summary(self.df)
+
+        shown = []
+
+        def capture_show(df, n=20, truncate=True, vertical=False):
+            shown.append((df, n, truncate))
+
+        with patch(
+            "pyspark.sql.dataframe.DataFrame.show",
+            autospec=True,
+            side_effect=capture_show,
+        ):
+            result.show_violating_groups(n=5, sort=True)
+
+        self.assertEqual(len(shown), 1)
+
+        displayed_df, n, truncate = shown[0]
+        self.assertEqual(n, 5)
+        self.assertFalse(truncate)
+
+        actual = [
+            row["t_closeness"]
+            for row in displayed_df.select("t_closeness").collect()
+        ]
+
+        self.assertEqual(actual, sorted(actual, reverse=True))
+
+        original = {
+            row["PROVINCIA"]: row["t_closeness"]
+            for row in result.violating_groups.collect()
+        }
+
+        displayed = {
+            row["PROVINCIA"]: row["t_closeness"]
+            for row in displayed_df.collect()
+        }
+
+        for province, value in original.items():
+            self.assertAlmostEqual(
+                displayed[province],
+                round(value, 5),
+                places=10,
+            )
+
 
 
 if __name__ == "__main__":
