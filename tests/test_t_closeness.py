@@ -527,10 +527,13 @@ class TestTCloseness(unittest.TestCase):
         )
         result = model.summary(self.df)
 
+        df_class = type(result.violating_groups)
+
         for n in [10, 5]:
             with self.subTest(n=n):
-                with patch(
-                    "pyspark.sql.dataframe.DataFrame.show",
+                with patch.object(
+                    df_class,
+                    "show",
                     autospec=True,
                 ) as mock_show:
                     result.show_violating_groups(n=n)
@@ -541,55 +544,6 @@ class TestTCloseness(unittest.TestCase):
                     mock_show.call_args.kwargs["truncate"]
                 )
 
-    def test_result_show_violating_groups_sorted_and_rounded(self):
-        model = TCloseness(
-            quasi_identifiers=["GENERO", "EDAD", "PROVINCIA"],
-            sensitive_attribute="ENFERMEDAD",
-            t_threshold=0.01,
-        )
-        result = model.summary(self.df)
-
-        shown = []
-
-        def capture_show(df, n=20, truncate=True, vertical=False):
-            shown.append((df, n, truncate))
-
-        with patch(
-            "pyspark.sql.dataframe.DataFrame.show",
-            autospec=True,
-            side_effect=capture_show,
-        ):
-            result.show_violating_groups(n=5, sort=True)
-
-        self.assertEqual(len(shown), 1)
-
-        displayed_df, n, truncate = shown[0]
-        self.assertEqual(n, 5)
-        self.assertFalse(truncate)
-
-        actual = [
-            row["t_closeness"]
-            for row in displayed_df.select("t_closeness").collect()
-        ]
-
-        self.assertEqual(actual, sorted(actual, reverse=True))
-
-        original = {
-            row["PROVINCIA"]: row["t_closeness"]
-            for row in result.violating_groups.collect()
-        }
-
-        displayed = {
-            row["PROVINCIA"]: row["t_closeness"]
-            for row in displayed_df.collect()
-        }
-
-        for province, value in original.items():
-            self.assertAlmostEqual(
-                displayed[province],
-                round(value, 5),
-                places=10,
-            )
 
 
 

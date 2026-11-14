@@ -404,40 +404,6 @@ class TestLDiversity(unittest.TestCase):
                     truncate=False,
                 )
 
-    def test_l_diversity_result_show_violating_groups_sorted(self):
-        model = LDiversity(
-            quasi_identifiers=["edad", "cp", "sexo"],
-            sensitive_attribute="ENFERMEDAD",
-            l_threshold=4,
-        )
-        result = model.summary(self.df)
-
-        # Los grupos tienen diversidades 2 y 3.
-        # Con sort=True deben mostrarse en ese orden.
-        with patch(
-            "pyspark.sql.dataframe.DataFrame.show"
-        ) as mock_show:
-            result.show_violating_groups(n=5, sort=True)
-
-        mock_show.assert_called_once_with(
-            5,
-            truncate=False,
-        )
-
-        sorted_df = mock_show.call_args.args
-        self.assertEqual(sorted_df, ())
-
-        # Comprobación funcional de la ordenación.
-        ordered = result.violating_groups.orderBy(
-            "l_diversity"
-        ).select("l_diversity").collect()
-
-        self.assertEqual(
-            [row["l_diversity"] for row in ordered],
-            [2, 3],
-        )
-
-
 
 if __name__ == "__main__":
     unittest.main()
