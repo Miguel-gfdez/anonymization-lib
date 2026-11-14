@@ -4,90 +4,83 @@
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=Miguel-gfdez_anonymization-lib&metric=alert_status)](https://sonarcloud.io/project/overview?id=Miguel-gfdez_anonymization-lib)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=Miguel-gfdez_anonymization-lib&metric=coverage)](https://sonarcloud.io/project/overview?id=Miguel-gfdez_anonymization-lib)
 
-Data anonymization library developed with Python and Apache Spark for processing large volumes of sensitive information in a scalable, efficient, and modular way.
+A Python library for **scalable data anonymization using Apache Spark**, designed to reduce re-identification risks while preserving the analytical utility of large datasets.
 
-The main goal of this project is to provide privacy-preserving mechanisms that reduce the risk of re-identification while maintaining the analytical utility of the data.
-
----
-
-## Overview
-
-This project focuses on the design and development of a data anonymization library capable of working with large datasets in Big Data environments.
-
-The library integrates privacy metrics, anonymization techniques, recommendation tools, and visualization capabilities using distributed data processing with Apache Spark.
-
-The implementation is designed to work with standard PySpark environments as well as Spark Connect-based environments such as Databricks.
-
----
+The library combines privacy metrics, anonymization techniques, automated recommendations, and data visualization in a modular framework compatible with standard PySpark and Spark Connect environments.
 
 ## Features
 
-The library includes the following functionalities:
+| Category | Functionality |
+|---|---|
+| Privacy metrics | k-anonymity, l-diversity, t-closeness |
+| Anonymization | Suppression, substitution, generalization |
+| Transformation pipelines | Sequential application of anonymization techniques |
+| Anonymization advisor | Quasi-identifier analysis, risk estimation, transformation recommendations |
+| Visualization | Exploratory analysis and privacy assessment |
+| Data management | Import and export utilities |
+| Distributed processing | Apache Spark and Spark Connect compatibility |
 
-- Privacy metrics:
-  - k-anonymity
-  - l-diversity
-  - t-closeness
+### Privacy metrics
 
-- Anonymization techniques:
-  - Suppression
-  - Substitution
-  - Generalization
-  - Sequential transformation pipelines
+The library provides three privacy metrics for assessing disclosure risks:
 
-- Anonymization advisor:
-  - Analysis of quasi-identifier cardinality
-  - Analysis of equivalence-group reduction
-  - Risk-level estimation
-  - Suggested anonymization actions
+- **k-anonymity:** evaluates whether each equivalence group contains at least *k* records.
+- **l-diversity:** evaluates the diversity of sensitive attribute values within equivalence groups.
+- **t-closeness:** measures the distance between sensitive attribute distributions within equivalence groups and the overall dataset.
 
-- Data visualization tools:
-  - Exploratory analysis before anonymization
-  - Support for assessing privacy impact and data utility
+Each metric provides aggregated results and information about groups that violate the configured privacy threshold.
 
-- Data management:
-  - Import utilities for common data formats
-  - Export utilities for common data formats
+### Anonymization techniques
 
-- Big Data support:
-  - Distributed processing with Apache Spark
-  - Spark Connect compatibility
-  - Scalable processing of large datasets
+Three anonymization techniques are supported:
 
----
+- **Suppression:** removes or nullifies selected attributes.
+- **Substitution:** replaces attribute values using configurable replacement rules.
+- **Generalization:** reduces data granularity through predefined rules.
 
-## Technologies
+Techniques can be applied individually or combined into sequential transformation pipelines.
 
-The project uses the following technologies:
+### Anonymization advisor
 
-- Python
-- Apache Spark
-- PySpark
-- Plotly
-- GitHub Actions
-- SonarCloud
+The `AnonymizationAdvisor` provides recommendations based on the selected quasi-identifiers and the characteristics of the dataset.
 
----
+Its functionality includes cardinality analysis, equivalence-group reduction, risk-level estimation, and suggested anonymization actions.
 
 ## Installation
 
-### Install from PyPI
+The library supports installation from PyPI, Wheel distributions, or source code.
 
-If Spark is not already provided by your environment, install the library with the optional PySpark dependency:
+### From PyPI
 
-```bash
-pip install "anonymization-lib[local]"
-```
-
-In managed Spark environments, such as Databricks, install the library without the optional PySpark dependency:
+Once the package is published on PyPI, install it with:
 
 ```bash
 pip install anonymization-lib
 ```
 
-This prevents the package from replacing the PySpark version managed by the platform.
+For local environments that require PySpark as an additional dependency:
 
-### Install from source
+```bash
+pip install "anonymization-lib[local]"
+```
+
+### From a Wheel
+
+Download the appropriate `.whl` file from a project distribution and install it using:
+
+```bash
+pip install path/to/anonymization_lib-<version>-py3-none-any.whl
+```
+
+For local environments requiring the optional Spark dependencies:
+
+```bash
+pip install "path/to/anonymization_lib-<version>-py3-none-any.whl[local]"
+```
+
+Replace `<version>` with the actual package version.
+
+### From source
 
 Clone the repository:
 
@@ -96,105 +89,119 @@ git clone https://github.com/Miguel-gfdez/anonymization-lib.git
 cd anonymization-lib
 ```
 
-For local development:
+Install the library in editable mode:
 
 ```bash
 pip install -e ".[local]"
 ```
 
-In managed Spark environments, such as Databricks:
+For environments where Spark is already provided, such as Databricks:
 
 ```bash
 pip install -e .
 ```
 
-The editable installation (`-e`) allows changes to the source code to be reflected without reinstalling the package.
+Editable installations allow source code changes to take effect without reinstalling the package.
+
+**Note:** In managed Spark environments, avoid installing the optional local PySpark dependency unless necessary, to prevent conflicts with the Spark version provided by the platform.
 
 ## Quick Start
 
-```python
-# 1. Create a Spark session
-from pyspark.sql import SparkSession
+The following example demonstrates how to evaluate k-anonymity on a Spark DataFrame.
 
+```python
+from pyspark.sql import SparkSession
+from anonymization_lib import KAnonymity
+
+# Create a Spark session
 spark = (
     SparkSession.builder
     .appName("AnonymizationExample")
     .getOrCreate()
 )
 
+# Load a dataset
+df = spark.read.parquet("data.parquet")
 
-# 2. Load a dataset
-from anonymization_lib import DataImporter
-
-df = DataImporter.import_data(
-    spark=spark,
-    path="data.parquet",
-    file_format="parquet",
+# Evaluate k-anonymity
+metric = KAnonymity(
+    quasi_identifiers=["AGE", "CITY"],
+    k_threshold=3,
 )
 
+result = metric.summary(df)
 
-# 3. Visualize data
+# Display results
+result.show_summary()
+result.show_violating_groups()
+```
+
+The resulting summary provides information about equivalence groups, privacy threshold compliance, and potentially violating groups.
+
+## Usage Examples
+
+### Data visualization
+
+Generate an exploratory visualization for a selected column:
+
+```python
 from anonymization_lib import Visualization
 
-viz = Visualization(column="AGE").transform(df)
-viz.show()
+fig = Visualization(
+    column="AGE"
+).transform(df)
 
+fig.show()
+```
 
-# 4. Apply anonymization techniques
-from anonymization_lib import Generalization, Substitution, Suppression
+### Anonymization pipeline
+
+Combine multiple anonymization techniques into a single workflow:
+
+```python
+from anonymization_lib import (
+    Generalization,
+    Substitution,
+    Suppression,
+)
 from anonymization_lib.techniques import TransformationPipeline
 
-supp = Suppression(
-    columns_modes={
-        "NAME": "null",
-        "CITY": "drop",
-    }
-)
-
-sub = Substitution(
-    column="NATIONAL_ID",
-    replacement_char="*",
-    mode="full",
-)
-
-gen_age = Generalization(
-    column="AGE",
-    rules_path="data/gen_age.json",
-)
-
-gen_postal_code = Generalization(
-    column="POSTAL_CODE",
-    rules_path="data/gen_postal_code_region.json",
-    output_column="REGION",
-)
-
 pipeline = [
-    supp,
-    sub,
-    gen_age,
-    gen_postal_code,
+    Suppression(
+        columns_modes={
+            "NAME": "null",
+            "CITY": "drop",
+        }
+    ),
+    Substitution(
+        column="NATIONAL_ID",
+        replacement_char="*",
+        mode="full",
+    ),
+    Generalization(
+        column="AGE",
+        rules_path="data/gen_age.json",
+    ),
+    Generalization(
+        column="POSTAL_CODE",
+        rules_path="data/gen_postal_code_region.json",
+        output_column="REGION",
+    ),
 ]
 
 df_anonymized = TransformationPipeline(
     df,
     pipeline,
 )
+```
 
+Transformations are applied sequentially, with the output of each transformation serving as the input to the next.
 
-# 5. Evaluate privacy metrics
-from anonymization_lib import KAnonymity
+### Anonymization recommendations
 
-k_metric = KAnonymity(
-    quasi_identifiers=["AGE", "REGION"]
-)
+Analyze quasi-identifiers and obtain anonymization recommendations:
 
-result = k_metric.summary(df_anonymized)
-
-result.show_summary()
-result.show_violating_groups()
-
-
-# 6. Get anonymization recommendations
+```python
 from anonymization_lib import AnonymizationAdvisor
 
 advisor = AnonymizationAdvisor(
@@ -208,32 +215,70 @@ recommendations.get_summary_df().show()
 recommendations.get_suggestions_df().show()
 ```
 
----
+### Data export
+
+Export an anonymized DataFrame using Spark:
+
+```python
+df_anonymized.write.mode("overwrite").parquet(
+    "output/anonymized"
+)
+```
+
+## Development and Testing
+
+The project uses Python's `unittest` framework for automated testing and `coverage` for measuring code coverage.
+
+### Install development dependencies
+
+```bash
+pip install -e ".[local]"
+pip install coverage
+```
+
+### Run tests
+
+```bash
+python -m unittest discover -s tests -p "test_*.py" -t .
+```
+
+### Generate a coverage report
+
+```bash
+coverage run --source=src/anonymization_lib -m unittest discover -s tests -p "test_*.py" -t .
+coverage report -m
+coverage html
+```
+
+The HTML coverage report is generated in `htmlcov/`.
+
+### Continuous Integration and Delivery
+
+The project uses GitHub Actions for automated workflows.
+
+**Continuous Integration (CI)** performs unit testing, code coverage analysis, static analysis with SonarCloud, and package building.
+
+**Continuous Delivery (CD)** builds Wheel and source distributions when a GitHub Release is published. PyPI publishing is planned but is not currently enabled in the release workflow.
+
+## Technologies
+
+- **Python:** library development and testing.
+- **Apache Spark / PySpark:** distributed data processing.
+- **Spark Connect:** compatibility with remote Spark environments.
+- **Plotly:** interactive data visualization.
+- **GitHub Actions:** CI/CD automation.
+- **SonarCloud:** static code analysis and quality monitoring.
 
 ## Project Status
 
-Current stable version: **v1.3.0**
+**Current stable version:** v1.4.0
 
-Implemented modules:
-
-- Privacy metrics
-- Anonymization techniques
-- Transformation pipelines
-- Visualization tools
-- Import/export utilities
-- Anonymization advisor
-- Spark Connect compatibility
-
----
+The library includes implemented privacy metrics, anonymization techniques, transformation pipelines, visualization utilities, data import/export, and an anonymization advisor.
 
 ## Author
 
 Miguel Galán Fernández
 
----
-
 ## License
 
-This project is licensed under the MIT License.
-
-See the LICENSE file for more details.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
