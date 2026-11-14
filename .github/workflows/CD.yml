@@ -1,3 +1,4 @@
+
 name: CD
 
 on:
@@ -14,10 +15,13 @@ jobs:
 
     permissions:
       id-token: write
+      contents: write
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name }}
 
       - name: Set up Python
         uses: actions/setup-python@v7
@@ -29,6 +33,15 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install build
           python -m build
+
+      - name: Upload distributions to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload \
+            "${{ github.event.release.tag_name }}" \
+            dist/*.whl dist/*.tar.gz \
+            --clobber
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
